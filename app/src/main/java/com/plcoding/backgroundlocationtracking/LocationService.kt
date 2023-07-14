@@ -15,6 +15,15 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 
+
+import okhttp3.MediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+
 class LocationService: Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -50,15 +59,32 @@ class LocationService: Service() {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         locationClient
-            .getLocationUpdates(10000L)
+            .getLocationUpdates(4000L)
             .catch { e -> e.printStackTrace() }
             .onEach { location ->
                 val lat = location.latitude.toString().takeLast(3)
                 val long = location.longitude.toString().takeLast(3)
-                val updatedNotification = notification.setContentText(
-                    "Location: ($lat, $long)"
-                )
+                val updatedNotification = notification.setContentText("Location: ($lat, $long)")
                 notificationManager.notify(1, updatedNotification.build())
+
+                val url = "https://locationsocket.jmjdrwrk.repl.co/location"
+
+                val json = JSONObject()
+                json.put("latitude", location.latitude)
+                json.put("longitude", location.longitude)
+                val requestBody = json.toString().toRequestBody("application/json".toMediaTypeOrNull())
+
+                val request = Request.Builder()
+                    .url(url)
+                    .post(requestBody)
+                    .build()
+
+                val client = OkHttpClient()
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        // Handle the error if the request was not successful
+                    }
+                }
             }
             .launchIn(serviceScope)
 
