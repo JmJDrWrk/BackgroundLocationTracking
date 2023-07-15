@@ -5,14 +5,12 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.location.Address
+import android.location.Geocoder
 import android.os.IBinder
 import androidx.compose.ui.platform.isDebugInspectorInfoEnabled
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.LocationServices
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -33,16 +31,18 @@ import io.socket.engineio.client.transports.WebSocket
 
 import android.media.AudioManager
 import android.media.ToneGenerator
+import kotlinx.coroutines.*
 
 
 class LocationService: Service() {
-
+    private val geocoder: Geocoder by lazy { Geocoder(applicationContext) }
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var locationClient: LocationClient
     private lateinit var socket: Socket
 
     private var lastLat = "!";
     private var lastLng = "!";
+    private var lastAddress = "!"
 
     override fun onBind(p0: Intent?): IBinder? {
         return null
@@ -61,25 +61,6 @@ class LocationService: Service() {
         super.onCreate()
         sharedPreferences = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
 
-        val url = "https://ruttradarvalkiria.jmjdrwrk.repl.co/users/login"
-
-        val json = JSONObject()
-        json.put("email", getSavedEmail())
-        json.put("password", getSavedPassword())
-
-        val requestBody = json.toString().toRequestBody("application/json".toMediaTypeOrNull())
-
-        val request = Request.Builder()
-            .url(url)
-            .post(requestBody)
-            .build()
-
-        val client = OkHttpClient()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                // Handle the error if the request was not successful
-            }
-        }
 
         // Initialize the socket
         println("[RTRD] Initizalizing socketIo connection")
@@ -87,11 +68,13 @@ class LocationService: Service() {
             "email" to "jroman@ruttradar.com",
             "pass" to "123"
         )
-        socket = IO.socket("https://locationsocket.jmjdrwrk.repl.co/?mode=certified-ruttradar-webapp", IO.Options().apply {
+        socket = IO.socket("https://locationsocket.jmjdrwrk.repl.co/?mode=certified-ruttradar-device", IO.Options().apply {
             transports = arrayOf(WebSocket.NAME)
             isDebugInspectorInfoEnabled = true
-
-            auth = mapOf("token" to <reponseofthelogin>)
+            auth = mapOf(
+                "email" to getSavedEmail(),
+                "password" to getSavedPassword()
+            )
         })
 
         socket.connect()
@@ -122,11 +105,28 @@ class LocationService: Service() {
             println("[RTRD] Server said: $serverMessage")
         }
     }
-    private val onLocationRequested = Emitter.Listener {
+    private val onLocationRequested = Emitter.Listener {args ->
+
+        val serverMessage = args[0].toString()
+        println("[RTRD] to/requested " + JSONObject(serverMessage).getString(("requestor")))
+        println("[RTRD] from/requestor " + JSONObject(serverMessage).getString(("requested")))
+
+
         println("[RTRD] Someone requested my location")
         val json = JSONObject();
         json.put("latitude", lastLat)
         json.put("longitude", lastLng)
+        json.put("requestor", JSONObject(serverMessage).getString(("requestor")))
+        json.put("requested", JSONObject(serverMessage).getString(("requested")))
+
+        println("[RTRD] lasts " + lastLat + " " + lastLng)
+        //Geocode here
+        val addresses = geocoder.getFromLocation(lastLat.toDouble(), lastLng.toDouble() , 1)
+        val address = addresses?.firstOrNull()?.getAddressLine(0) ?: "Unknown"
+        println("[RTRD] Location geocoded: $address")
+
+        json.put("address", address)
+
         socket.emit("requestedLocation",json)
 
         //TOne generator
@@ -140,7 +140,26 @@ class LocationService: Service() {
         }
         return super.onStartCommand(intent, flags, startId)
     }
+    private fun formatAddress(address: Address): String {
+        val lines = mutableListOf<String>()
 
+        // Add the address lines
+        for (i in 0..address.maxAddressLineIndex) {
+            lines.add(address.getAddressLine(i))
+        }
+
+        // Add the locality, if available
+        address.locality?.let { lines.add(it) }
+
+        // Add the postal code, if available
+        address.postalCode?.let { lines.add(it) }
+
+        // Add the country name, if available
+        address.countryName?.let { lines.add(it) }
+
+        // Join all the lines into a single string
+        return lines.joinToString(separator = ", ")
+    }
     private fun start() {
         val notification = NotificationCompat.Builder(this, "location")
             .setContentTitle("Tracking location...")
@@ -160,8 +179,10 @@ class LocationService: Service() {
                 notificationManager.notify(1, updatedNotification.build())
 
 
-                lastLat = lat
-                lastLng = long
+                //Last value
+                lastLat = location.latitude.toString()
+                lastLng = location.longitude.toString()
+
 
 
                 val url = "https://locationsocket.jmjdrwrk.repl.co/location"
@@ -189,8 +210,13 @@ class LocationService: Service() {
     }
 
     private fun stop() {
-        stopForeground(true)
-        stopSelf()
+        socket.disconnect()
+        socket.on(Socket.EVENT_DISCONNECT) {
+            // This code will be executed when the disconnection is successful
+            stopForeground(true)
+            stopSelf()
+        }
+
     }
 
     override fun onDestroy() {
