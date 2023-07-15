@@ -33,6 +33,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".DeviceActivity"
+            android:label="Device Activity"
+            android:theme="@style/Theme.BackgroundLocationTracking"
+            android:exported="true" />
     </application>
 
 </manifest>

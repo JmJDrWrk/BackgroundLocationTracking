@@ -4,6 +4,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.IBinder
 import androidx.compose.ui.platform.isDebugInspectorInfoEnabled
 import androidx.core.app.NotificationCompat
@@ -46,9 +47,39 @@ class LocationService: Service() {
     override fun onBind(p0: Intent?): IBinder? {
         return null
     }
+    private lateinit var sharedPreferences: SharedPreferences
+
+    private fun getSavedEmail(): String {
+        return sharedPreferences.getString("email", "") ?: ""
+    }
+
+    private fun getSavedPassword(): String {
+        return sharedPreferences.getString("password", "") ?: ""
+    }
 
     override fun onCreate() {
         super.onCreate()
+        sharedPreferences = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+
+        val url = "https://ruttradarvalkiria.jmjdrwrk.repl.co/users/login"
+
+        val json = JSONObject()
+        json.put("email", getSavedEmail())
+        json.put("password", getSavedPassword())
+
+        val requestBody = json.toString().toRequestBody("application/json".toMediaTypeOrNull())
+
+        val request = Request.Builder()
+            .url(url)
+            .post(requestBody)
+            .build()
+
+        val client = OkHttpClient()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                // Handle the error if the request was not successful
+            }
+        }
 
         // Initialize the socket
         println("[RTRD] Initizalizing socketIo connection")
@@ -59,8 +90,8 @@ class LocationService: Service() {
         socket = IO.socket("https://locationsocket.jmjdrwrk.repl.co/?mode=certified-ruttradar-webapp", IO.Options().apply {
             transports = arrayOf(WebSocket.NAME)
             isDebugInspectorInfoEnabled = true
-            /*jaimeroman@ruttradar.com*/
-            auth = mapOf("token" to "1eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI2NGIxOTIyNTk5ODZiMjBkYTY0ZDA1Y2IiLCJlbWFpbCI6ImphaW1lcm9tYW5AcnV0dHJhZGFyLmNvbSIsIm5hbWUiOiJKYWltZSIsImlhdCI6MTY4OTM1ODk1OSwiZXhwIjoxNjg5NDQ1MzU5fQ.D_x1t4jADrVOI4oViy-vjmKvx4Y-M0Ow1FZULTqENCk")
+
+            auth = mapOf("token" to <reponseofthelogin>)
         })
 
         socket.connect()

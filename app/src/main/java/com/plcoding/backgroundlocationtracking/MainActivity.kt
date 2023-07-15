@@ -1,4 +1,5 @@
 package com.plcoding.backgroundlocationtracking
+
 import android.Manifest
 import android.content.Intent
 import android.os.Bundle
@@ -6,10 +7,19 @@ import android.widget.Button
 import androidx.activity.ComponentActivity
 import androidx.core.app.ActivityCompat
 
-
-public class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Change the view
+        setContentView(R.layout.activity_main)
+
+        val deviceButton = findViewById<Button>(R.id.deviceButton)
+        deviceButton.setOnClickListener {
+            val intent = Intent(this, DeviceActivity::class.java)
+            startActivity(intent)
+        }
+
         ActivityCompat.requestPermissions(
             this,
             arrayOf(
@@ -18,7 +28,6 @@ public class MainActivity : ComponentActivity() {
             ),
             0
         )
-        setContentView(R.layout.activity_main)
 
         val startButton = findViewById<Button>(R.id.startButton)
         val stopButton = findViewById<Button>(R.id.stopButton)
