@@ -1,5 +1,6 @@
 package com.plcoding.backgroundlocationtracking
 
+
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
@@ -7,15 +8,22 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.location.Address
 import android.location.Geocoder
+import android.media.AudioManager
+import android.media.ToneGenerator
+import android.os.Build
 import android.os.IBinder
+import androidx.annotation.RequiresApi
 import androidx.compose.ui.platform.isDebugInspectorInfoEnabled
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.LocationServices
+import io.socket.client.IO
+import io.socket.client.Socket
+import io.socket.emitter.Emitter
+import io.socket.engineio.client.transports.WebSocket
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-
-
 import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
@@ -24,25 +32,31 @@ import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
-import io.socket.client.IO
-import io.socket.client.Socket
-import io.socket.emitter.Emitter
-import io.socket.engineio.client.transports.WebSocket
-
-import android.media.AudioManager
-import android.media.ToneGenerator
-import kotlinx.coroutines.*
-
 
 class LocationService: Service() {
+
     private val geocoder: Geocoder by lazy { Geocoder(applicationContext) }
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var locationClient: LocationClient
     private lateinit var socket: Socket
 
-    private var lastLat = "!";
-    private var lastLng = "!";
-    private var lastAddress = "!"
+//    private var lastLat = "!";
+//    private var lastLng = "!";
+//    private var lastAddress = "!";
+//    private var lastVacc = "!";
+//    private var lastHacc = "!";
+//    private var lastAlt = "!";
+//    private var lastSpeed = "!";
+//    private var lastSpeedAcc = "!";
+
+    private var lastLocationData = JSONObject()
+        .put("latitude", "location.latitude.toString()")
+        .put("longitude", "location.longitude.toString()")
+        .put("vacc", "location.verticalAccuracyMeters.toString()")
+        .put("hacc", "location.accuracy.toString()")
+        .put("alt", "location.altitude.toString()")
+        .put("speed", "location.speed.toString()")
+        .put("speedacc", "location.speedAccuracyMetersPerSecond.toString()")
 
     override fun onBind(p0: Intent?): IBinder? {
         return null
@@ -113,26 +127,27 @@ class LocationService: Service() {
 
 
         println("[RTRD] Someone requested my location")
-        val json = JSONObject();
-        json.put("latitude", lastLat)
-        json.put("longitude", lastLng)
-        json.put("requestor", JSONObject(serverMessage).getString(("requestor")))
-        json.put("requested", JSONObject(serverMessage).getString(("requested")))
+        val lastLocalLocationData = lastLocationData
 
-        println("[RTRD] lasts " + lastLat + " " + lastLng)
+        lastLocalLocationData.put("requestor", JSONObject(serverMessage).getString(("requestor")))
+        lastLocalLocationData.put("requested", JSONObject(serverMessage).getString(("requested")))
+
+        println("[RTRD] lasts " + lastLocalLocationData.get("latitude") + " " + lastLocalLocationData.get("longitude"))
         //Geocode here
-        val addresses = geocoder.getFromLocation(lastLat.toDouble(), lastLng.toDouble() , 1)
+        val addresses = geocoder.getFromLocation(lastLocalLocationData.getString("latitude").toDouble(), lastLocalLocationData.getString("longitude").toDouble() , 1)
         val address = addresses?.firstOrNull()?.getAddressLine(0) ?: "Unknown"
         println("[RTRD] Location geocoded: $address")
 
-        json.put("address", address)
+        lastLocalLocationData.put("address", address)
 
-        socket.emit("requestedLocation",json)
+        socket.emit("requestedLocation",lastLocalLocationData)
 
         //TOne generator
         val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
-        toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 1000)
+        toneGenerator.startTone(3)
+        toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 5000)
     }
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when(intent?.action) {
             ACTION_START -> start()
@@ -160,6 +175,7 @@ class LocationService: Service() {
         // Join all the lines into a single string
         return lines.joinToString(separator = ", ")
     }
+    @RequiresApi(Build.VERSION_CODES.O)
     private fun start() {
         val notification = NotificationCompat.Builder(this, "location")
             .setContentTitle("Tracking location...")
@@ -170,27 +186,46 @@ class LocationService: Service() {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         locationClient
-            .getLocationUpdates(4000L)
+//            .getLocationUpdates(120000L)
+            .getLocationUpdates(60000L)
             .catch { e -> e.printStackTrace() }
             .onEach { location ->
+
+                println(location)
+                
                 val lat = location.latitude.toString().takeLast(3)
                 val long = location.longitude.toString().takeLast(3)
                 val updatedNotification = notification.setContentText("Location: ($lat, $long)")
                 notificationManager.notify(1, updatedNotification.build())
 
 
-                //Last value
-                lastLat = location.latitude.toString()
-                lastLng = location.longitude.toString()
-
-
+                //Send a heartBeat
+//                val heartbeatURL = "https://locationsocket.jmjdrwrk.repl.co/heartbeat?email="+getSavedEmail()
+//
+//                val heartbeatREQUEST = Request.Builder()
+//                    .url(heartbeatURL)
+//                    .get()
+//                    .build()
+//                println("[RTRD] HTTP heartbeat prepared")
+//                val heartbeatCLIENT = OkHttpClient()
+//                heartbeatCLIENT.newCall(heartbeatREQUEST).execute().use { response ->
+//                    if (!response.isSuccessful) {
+//                        println("[RTRD] HTTP heartbeat sent")
+//                    }
+//                }
+                lastLocationData = JSONObject()
+                    .put("latitude", location.latitude.toString())
+                    .put("longitude", location.longitude.toString())
+                    .put("vacc", location.verticalAccuracyMeters.toString())
+                    .put("hacc", location.accuracy.toString())
+                    .put("alt", location.altitude.toString())
+                    .put("speed", location.speed.toString())
+                    .put("speedacc", location.speedAccuracyMetersPerSecond.toString())
 
                 val url = "https://locationsocket.jmjdrwrk.repl.co/location"
 
-                val json = JSONObject()
-                json.put("latitude", location.latitude)
-                json.put("longitude", location.longitude)
-                val requestBody = json.toString().toRequestBody("application/json".toMediaTypeOrNull())
+
+                val requestBody = lastLocationData.toString().toRequestBody("application/json".toMediaTypeOrNull())
 
                 val request = Request.Builder()
                     .url(url)

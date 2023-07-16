@@ -23,47 +23,68 @@ import com.plcoding.backgroundlocationtracking.ui.theme.BackgroundLocationTracki
 
 class DeviceActivity : ComponentActivity() {
     private lateinit var sharedPreferences: SharedPreferences
-
+    private lateinit var emailEditText: EditText
+    private lateinit var passwordEditText: EditText
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.device_activity)
         sharedPreferences = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-        setContent {
-            BackgroundLocationTrackingTheme {
-                Surface(color = MaterialTheme.colors.background) {
-                    DeviceScreen()
-                }
-            }
+
+        emailEditText = findViewById(R.id.emailEditText)
+        passwordEditText = findViewById(R.id.passwordEditText)
+
+        val savedEmail = getSavedEmail()
+        val savedPassword = getSavedPassword()
+        emailEditText.setText(savedEmail)
+        passwordEditText.setText(savedPassword)
+
+        val loginButton = findViewById<Button>(R.id.savebt)
+        loginButton.setOnClickListener {
+            val email = emailEditText.text.toString()
+            val password = passwordEditText.text.toString()
+            saveCredentials(email, password)
+
+            finish()
         }
+//        super.onCreate(savedInstanceState)
+//        sharedPreferences = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
+//        setContent {
+//            BackgroundLocationTrackingTheme {
+//                Surface(color = MaterialTheme.colors.background) {
+//                    DeviceScreen()
+//                }
+//            }
+//        }
     }
 
-    @Composable
-    private fun DeviceScreen() {
-        val emailState = rememberSaveable { mutableStateOf(getSavedEmail()) }
-        val passwordState = rememberSaveable { mutableStateOf(getSavedPassword()) }
-
-        Column(modifier = Modifier.padding(16.dp)) {
-            TextField(
-                value = emailState.value,
-                onValueChange = { emailState.value = it },
-                label = { Text(text = "Enter email") }
-            )
-
-            TextField(
-                value = passwordState.value,
-                onValueChange = { passwordState.value = it },
-                label = { Text(text = "Enter password") },
-                visualTransformation = PasswordVisualTransformation()
-            )
-
-            Button(
-                onClick = { saveCredentials(emailState.value, passwordState.value) },
-                modifier = Modifier.padding(top = 16.dp)
-            ) {
-                Text(text = "Login")
-            }
-        }
-    }
-
+//    @Composable
+//    private fun DeviceScreen() {
+//        val emailState = rememberSaveable { mutableStateOf(getSavedEmail()) }
+//        val passwordState = rememberSaveable { mutableStateOf(getSavedPassword()) }
+//
+//        Column(modifier = Modifier.padding(16.dp)) {
+//            TextField(
+//                value = emailState.value,
+//                onValueChange = { emailState.value = it },
+//                label = { Text(text = "Enter email") }
+//            )
+//
+//            TextField(
+//                value = passwordState.value,
+//                onValueChange = { passwordState.value = it },
+//                label = { Text(text = "Enter password") },
+//                visualTransformation = PasswordVisualTransformation()
+//            )
+//
+//            Button(
+//                onClick = { saveCredentials(emailState.value, passwordState.value) },
+//                modifier = Modifier.padding(top = 16.dp)
+//            ) {
+//                Text(text = "Login")
+//            }
+//        }
+//    }
+//
     private fun getSavedEmail(): String {
         return sharedPreferences.getString("email", "") ?: ""
     }
@@ -71,7 +92,7 @@ class DeviceActivity : ComponentActivity() {
     private fun getSavedPassword(): String {
         return sharedPreferences.getString("password", "") ?: ""
     }
-
+//
     private fun saveCredentials(email: String, password: String) {
         sharedPreferences.edit {
             putString("email", email)
