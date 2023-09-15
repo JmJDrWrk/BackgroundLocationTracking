@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ... (existing resources) ... -->
+    <string-array name="location_update_intervals">
+        <item>60000L</item>
+        <item>5000L</item>
+        <item>150000L</item>
+    </string-array>
+</resources>

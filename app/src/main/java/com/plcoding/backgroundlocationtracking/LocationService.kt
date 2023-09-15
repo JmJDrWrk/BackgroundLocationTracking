@@ -76,6 +76,19 @@ class LocationService: Service() {
         return sharedPreferences.getString("password", "") ?: ""
     }
 
+    private fun getLocationUpdateInterval(): Long {
+        return sharedPreferences.getLong("getlocationUpdateInterval", 60000L)
+    }
+
+    private fun getFallDetection(): Boolean {
+        return sharedPreferences.getBoolean("fallDetection", false)
+    }
+
+    private fun getRecordRoute(): Boolean {
+        return sharedPreferences.getBoolean("recordRoute", false)
+    }
+
+
     private fun scheduleLocationUpload() {
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -148,9 +161,15 @@ class LocationService: Service() {
 
         println("[RTRD] Someone requested my location")
         val lastLocalLocationData = lastLocationData
+        val settings = JSONObject()
 
         lastLocalLocationData.put("requestor", JSONObject(serverMessage).getString(("requestor")))
         lastLocalLocationData.put("requested", JSONObject(serverMessage).getString(("requested")))
+
+        //Set settings
+        settings.put("recordRoute", getRecordRoute())
+        settings.put("updateInterval", getLocationUpdateInterval())
+        lastLocalLocationData.put("settings", settings)
 
         println("[RTRD] lasts " + lastLocalLocationData.get("latitude") + " " + lastLocalLocationData.get("longitude"))
         //Geocode here
@@ -217,10 +236,11 @@ class LocationService: Service() {
 
         locationClient
 //            .getLocationUpdates(120000L)
-            .getLocationUpdates(60000L)
+            .getLocationUpdates(getLocationUpdateInterval())
             .catch { e -> e.printStackTrace() }
             .onEach { location ->
 
+                //LOCATION COMPUTE START
                 println(location)
                 
                 val lat = location.latitude.toString().takeLast(3)
@@ -228,21 +248,6 @@ class LocationService: Service() {
                 val updatedNotification = notification.setContentText("Location: ($lat, $long)")
                 notificationManager.notify(1, updatedNotification.build())
 
-
-                //Send a heartBeat
-//                val heartbeatURL = "https://locationsocket.jmjdrwrk.repl.co/heartbeat?email="+getSavedEmail()
-//
-//                val heartbeatREQUEST = Request.Builder()
-//                    .url(heartbeatURL)
-//                    .get()
-//                    .build()
-//                println("[RTRD] HTTP heartbeat prepared")
-//                val heartbeatCLIENT = OkHttpClient()
-//                heartbeatCLIENT.newCall(heartbeatREQUEST).execute().use { response ->
-//                    if (!response.isSuccessful) {
-//                        println("[RTRD] HTTP heartbeat sent")
-//                    }
-//                }
                 lastLocationData = JSONObject()
                     .put("latitude", location.latitude.toString())
                     .put("longitude", location.longitude.toString())
@@ -251,6 +256,10 @@ class LocationService: Service() {
                     .put("alt", location.altitude.toString())
                     .put("speed", location.speed.toString())
                     .put("speedacc", location.speedAccuracyMetersPerSecond.toString())
+
+
+                //LOCATION COMPUTE STOP
+
 
 //                val url = "https://locationsocket.jmjdrwrk.repl.co/location"
 //

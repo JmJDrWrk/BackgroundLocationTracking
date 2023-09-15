@@ -3,7 +3,9 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.Spinner
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
@@ -25,6 +27,9 @@ class DeviceActivity : ComponentActivity() {
     private lateinit var sharedPreferences: SharedPreferences
     private lateinit var emailEditText: EditText
     private lateinit var passwordEditText: EditText
+    private lateinit var recordRouteCheckbox: CheckBox
+    private lateinit var fallDetectionCheckbox: CheckBox
+    private lateinit var locationUpdateIntervalSpinner: Spinner
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.device_activity)
@@ -33,10 +38,27 @@ class DeviceActivity : ComponentActivity() {
         emailEditText = findViewById(R.id.emailEditText)
         passwordEditText = findViewById(R.id.passwordEditText)
 
+
         val savedEmail = getSavedEmail()
         val savedPassword = getSavedPassword()
+        val recordRoute = getRecordRoute()
+        val fallDetection = getFallDetection()
+        val selectedInterval = getLocationUpdateInterval()
+
         emailEditText.setText(savedEmail)
         passwordEditText.setText(savedPassword)
+
+        recordRouteCheckbox = findViewById(R.id.recordRouteCheckbox)
+        fallDetectionCheckbox = findViewById(R.id.fallDetectionCheckbox)
+        locationUpdateIntervalSpinner = findViewById(R.id.locationUpdateIntervalSpinner)
+
+        // Set the state of checkboxes and spinner
+        recordRouteCheckbox.isChecked = recordRoute
+        fallDetectionCheckbox.isChecked = fallDetection
+        // Set the selected item in the spinner
+        val position = resources.getStringArray(R.array.location_update_intervals).indexOf(selectedInterval)
+        locationUpdateIntervalSpinner.setSelection(position)
+
 
         val loginButton = findViewById<Button>(R.id.savebt)
         loginButton.setOnClickListener {
@@ -46,45 +68,13 @@ class DeviceActivity : ComponentActivity() {
 
             finish()
         }
-//        super.onCreate(savedInstanceState)
-//        sharedPreferences = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-//        setContent {
-//            BackgroundLocationTrackingTheme {
-//                Surface(color = MaterialTheme.colors.background) {
-//                    DeviceScreen()
-//                }
-//            }
-//        }
+        // Initialize checkboxes and spinner
+        recordRouteCheckbox = findViewById(R.id.recordRouteCheckbox)
+        fallDetectionCheckbox = findViewById(R.id.fallDetectionCheckbox)
+        locationUpdateIntervalSpinner = findViewById(R.id.locationUpdateIntervalSpinner)
     }
 
-//    @Composable
-//    private fun DeviceScreen() {
-//        val emailState = rememberSaveable { mutableStateOf(getSavedEmail()) }
-//        val passwordState = rememberSaveable { mutableStateOf(getSavedPassword()) }
-//
-//        Column(modifier = Modifier.padding(16.dp)) {
-//            TextField(
-//                value = emailState.value,
-//                onValueChange = { emailState.value = it },
-//                label = { Text(text = "Enter email") }
-//            )
-//
-//            TextField(
-//                value = passwordState.value,
-//                onValueChange = { passwordState.value = it },
-//                label = { Text(text = "Enter password") },
-//                visualTransformation = PasswordVisualTransformation()
-//            )
-//
-//            Button(
-//                onClick = { saveCredentials(emailState.value, passwordState.value) },
-//                modifier = Modifier.padding(top = 16.dp)
-//            ) {
-//                Text(text = "Login")
-//            }
-//        }
-//    }
-//
+
     private fun getSavedEmail(): String {
         return sharedPreferences.getString("email", "") ?: ""
     }
@@ -92,11 +82,26 @@ class DeviceActivity : ComponentActivity() {
     private fun getSavedPassword(): String {
         return sharedPreferences.getString("password", "") ?: ""
     }
-//
+    private fun getRecordRoute(): Boolean {
+        return sharedPreferences.getBoolean("recordRoute", false)
+    }
+
+    private fun getFallDetection(): Boolean {
+        return sharedPreferences.getBoolean("fallDetection", false)
+    }
+
+    private fun getLocationUpdateInterval(): String {
+        return sharedPreferences.getString("locationUpdateInterval", "1 minute") ?: "1 minute"
+    }
+
+    //
     private fun saveCredentials(email: String, password: String) {
         sharedPreferences.edit {
             putString("email", email)
             putString("password", password)
+            putBoolean("recordRoute", recordRouteCheckbox.isChecked)
+            putBoolean("fallDetection", fallDetectionCheckbox.isChecked)
+            putString("locationUpdateInterval", locationUpdateIntervalSpinner.selectedItem.toString())
             apply()
         }
     }
