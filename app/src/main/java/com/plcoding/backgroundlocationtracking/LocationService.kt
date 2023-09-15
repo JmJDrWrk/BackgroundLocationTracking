@@ -32,6 +32,11 @@ import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
+import androidx.work.Constraints
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequest
+import androidx.work.WorkManager
+import java.util.concurrent.TimeUnit
 
 class LocationService: Service() {
 
@@ -69,6 +74,21 @@ class LocationService: Service() {
 
     private fun getSavedPassword(): String {
         return sharedPreferences.getString("password", "") ?: ""
+    }
+
+    private fun scheduleLocationUpload() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+
+        val periodicWorkRequest = PeriodicWorkRequest.Builder(
+            LocationUploadWorker::class.java,
+            15, TimeUnit.MINUTES
+        )
+            .setConstraints(constraints)
+            .build()
+
+        WorkManager.getInstance(this).enqueue(periodicWorkRequest)
     }
 
     override fun onCreate() {
@@ -149,12 +169,22 @@ class LocationService: Service() {
     }
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_START -> {
+                start()
+                scheduleLocationUpload() // Schedule the periodic work
+            }
+            ACTION_STOP -> stop()
+        }
+        return super.onStartCommand(intent, flags, startId)
+    }
+    /*override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when(intent?.action) {
             ACTION_START -> start()
             ACTION_STOP -> stop()
         }
         return super.onStartCommand(intent, flags, startId)
-    }
+    }*/
     private fun formatAddress(address: Address): String {
         val lines = mutableListOf<String>()
 
@@ -222,22 +252,22 @@ class LocationService: Service() {
                     .put("speed", location.speed.toString())
                     .put("speedacc", location.speedAccuracyMetersPerSecond.toString())
 
-                val url = "https://locationsocket.jmjdrwrk.repl.co/location"
-
-
-                val requestBody = lastLocationData.toString().toRequestBody("application/json".toMediaTypeOrNull())
-
-                val request = Request.Builder()
-                    .url(url)
-                    .post(requestBody)
-                    .build()
-
-                val client = OkHttpClient()
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) {
-                        // Handle the error if the request was not successful
-                    }
-                }
+//                val url = "https://locationsocket.jmjdrwrk.repl.co/location"
+//
+//
+//                val requestBody = lastLocationData.toString().toRequestBody("application/json".toMediaTypeOrNull())
+//
+//                val request = Request.Builder()
+//                    .url(url)
+//                    .post(requestBody)
+//                    .build()
+//
+//                val client = OkHttpClient()
+//                client.newCall(request).execute().use { response ->
+//                    if (!response.isSuccessful) {
+//                        // Handle the error if the request was not successful
+//                    }
+//                }
             }
             .launchIn(serviceScope)
 
