@@ -84,6 +84,11 @@ class LocationService: Service() {
         return sharedPreferences.getBoolean("recordRoute", false)
     }
 
+    private fun getRouteName(): String {
+        return sharedPreferences.getString("recordRoute", "unamed") ?: "unamed"
+    }
+
+
     private fun getAddress(lastLocalLocationData: JSONObject): String {
         val addresses = geocoder.getFromLocation(lastLocalLocationData.getString("latitude").toDouble(), lastLocalLocationData.getString("longitude").toDouble() , 1)
         val address = addresses?.firstOrNull()?.getAddressLine(0) ?: "Unknown"
@@ -97,6 +102,7 @@ class LocationService: Service() {
         settings.put("recordRoute", getRecordRoute())
         settings.put("updateInterval", getLocationUpdateInterval())
         settings.put("shareAllways", getShareAllways())
+        settings.put("routeName", getRouteName())
         return settings
     }
 
@@ -304,6 +310,7 @@ class LocationService: Service() {
     companion object {
         const val ACTION_START = "ACTION_START"
         const val ACTION_STOP = "ACTION_STOP"
+        const val EXTRA_ROUTE_NAME = "route_name"
     }
 }
 
