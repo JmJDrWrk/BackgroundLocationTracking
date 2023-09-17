@@ -198,7 +198,7 @@ class LocationService: Service() {
                 lastLocalLocationData.getString("alt").isEmpty() ||
                 lastLocalLocationData.getString("hacc").isEmpty() ||
                 lastLocalLocationData.getString("vacc").isEmpty() ){
-                println("RISK UNDEFINED!")
+                println("[RTRD] RISK UNDEFINED!")
                 socket.emit("requestedLocationFailed")
             }else{
 
@@ -213,6 +213,7 @@ class LocationService: Service() {
             }
 
         }catch (e: Error){
+            println("[RTRD]" +e)
             socket.emit("requestedLocationFailed")
         }
     }
