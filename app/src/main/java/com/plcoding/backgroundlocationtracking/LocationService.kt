@@ -25,18 +25,13 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import okhttp3.MediaType
-import okhttp3.MediaType.Companion.toMediaTypeOrNull
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody
-import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
-import androidx.work.Constraints
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequest
 import androidx.work.WorkManager
+import org.json.JSONArray
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 
 class LocationService: Service() {
@@ -44,9 +39,11 @@ class LocationService: Service() {
     private val geocoder: Geocoder by lazy { Geocoder(applicationContext) }
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var locationClient: LocationClient
+    private lateinit var gyroscopeClient: GyroscopeClient
+    private var crashed = false
     private lateinit var socket: Socket
-
-
+    private var lastAccelData = CopyOnWriteArrayList<FloatArray>()
+    private var lastGyroData = CopyOnWriteArrayList<FloatArray>()
     private var lastLocationData = JSONObject()
         .put("latitude", "")
         .put("longitude", "")
@@ -87,7 +84,26 @@ class LocationService: Service() {
     private fun getRouteName(): String {
         return sharedPreferences.getString("routeName", "unamed") ?: "unamed"
     }
+    fun calculateStats(data: List<FloatArray>): Triple<FloatArray, FloatArray, FloatArray> {
+        val numAxes = data[0].size
+        val maxValues = FloatArray(numAxes) { Float.MIN_VALUE }
+        val minValues = FloatArray(numAxes) { Float.MAX_VALUE }
+        val sumValues = FloatArray(numAxes) { 0f }
 
+        for (array in data) {
+            for (j in 0 until numAxes) {
+                val value = array[j]
+                maxValues[j] = maxOf(maxValues[j], value)
+                minValues[j] = minOf(minValues[j], value)
+                sumValues[j] += value
+            }
+        }
+
+        val averages = FloatArray(numAxes) { sumValues[it] / data.size }
+
+
+        return Triple(minValues, maxValues, averages)
+    }
 
     private fun getAddress(lastLocalLocationData: JSONObject): String {
         val addresses = geocoder.getFromLocation(lastLocalLocationData.getString("latitude").toDouble(), lastLocalLocationData.getString("longitude").toDouble() , 1)
@@ -103,10 +119,12 @@ class LocationService: Service() {
         settings.put("updateInterval", getLocationUpdateInterval())
         settings.put("shareAllways", getShareAllways())
         settings.put("routeName", getRouteName())
+        settings.put("crashed", crashed)
         return settings
     }
 
     private fun getBucket(serverMessage: String): JSONObject {
+
         val lastLocalLocationData = lastLocationData
 
         lastLocalLocationData.put("requestor", JSONObject(serverMessage).getString(("requestor")))
@@ -115,6 +133,23 @@ class LocationService: Service() {
         lastLocalLocationData.put("address", getAddress(lastLocalLocationData))
 
         println("[RTRD] lasts " + lastLocalLocationData.get("latitude") + " " + lastLocalLocationData.get("longitude"))
+        val (minGyro, maxGyro, avgGyro) = calculateStats(lastGyroData)
+        val (minAccel, maxAccel, avgAccel) = calculateStats(lastAccelData)
+
+        val gyroData = JSONObject()
+            .put("x", JSONObject().put("min",minGyro[0].toFloat() ).put("max", maxGyro[0].toFloat() ).put("avg", avgGyro[0].toFloat() ))
+            .put("y", JSONObject().put("min",minGyro[1].toFloat() ).put("max", maxGyro[1].toFloat() ).put("avg", avgGyro[1].toFloat() ))
+            .put("z", JSONObject().put("min",minGyro[2].toFloat() ).put("max", maxGyro[2].toFloat() ).put("avg", avgGyro[2].toFloat() ))
+
+        val accelData = JSONObject()
+            .put("x", JSONObject().put("min",minAccel[0]).put("max", maxAccel[0]).put("avg", avgAccel[0]))
+            .put("y", JSONObject().put("min",minAccel[1]).put("max", maxAccel[1]).put("avg", avgAccel[1]))
+            .put("z", JSONObject().put("min",minAccel[2]).put("max", maxAccel[2]).put("avg", avgAccel[2]))
+
+//        lastLocalLocationData.put("accelerometer", accelData)
+        lastLocalLocationData.put("gyroscope", gyroData)
+        lastAccelData = CopyOnWriteArrayList<FloatArray>()
+        lastGyroData = CopyOnWriteArrayList<FloatArray>()
 
         return lastLocalLocationData;
     }
@@ -137,7 +172,7 @@ class LocationService: Service() {
     override fun onCreate() {
         super.onCreate()
         sharedPreferences = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
-
+        gyroscopeClient = GyroscopeClient(applicationContext)
 
         // Initialize the socket
         println("[RTRD] Initizalizing socketIo connection")
@@ -292,6 +327,38 @@ class LocationService: Service() {
             }
             .launchIn(serviceScope)
 
+        gyroscopeClient.getGyroscopeData()
+            .onEach { gyroData ->
+                lastGyroData.add(gyroData)
+                // Do something with gyroData (FloatArray)
+                // gyroData[0] -> x-axis, gyroData[1] -> y-axis, gyroData[2] -> z-axis
+//                println("[RTRD] [gyro] x: " + gyroData[1] + " y: "+  gyroData[2])
+                // Check if any axis exceeds 10
+                if (gyroData[0].toFloat() > 8 || gyroData[1].toFloat()  > 8 || gyroData[2].toFloat()  > 8) {
+                    //TOne generator
+                    val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+                    toneGenerator.startTone(3)
+                    toneGenerator.startTone(ToneGenerator.TONE_CDMA_ANSWER, 10000)
+                    crashed = true
+
+                    socket.emit("crashDetected", JSONObject()
+                        .put("x",gyroData[0].toFloat())
+                        .put("y",gyroData[1].toFloat())
+                        .put("z",gyroData[2].toFloat())
+                    )
+                }
+
+            }
+            .launchIn(serviceScope)
+
+        gyroscopeClient.getAccelerometerData()
+            .onEach { accelData ->
+                lastAccelData.add(accelData)
+                // Do something with accelData (FloatArray)
+                // accelData[0] -> x-axis, accelData[1] -> y-axis, accelData[2] -> z-axis
+//                println("[RTRD] [accel] x: " + accelData[1] + " y: "+  accelData[2])
+            }
+            .launchIn(serviceScope)
         startForeground(1, notification.build())
     }
 
