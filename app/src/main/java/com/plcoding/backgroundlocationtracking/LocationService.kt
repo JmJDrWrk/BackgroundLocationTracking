@@ -85,7 +85,7 @@ class LocationService: Service() {
     }
 
     private fun getRouteName(): String {
-        return sharedPreferences.getString("recordRoute", "unamed") ?: "unamed"
+        return sharedPreferences.getString("routeName", "unamed") ?: "unamed"
     }
 
 
@@ -116,7 +116,7 @@ class LocationService: Service() {
 
         println("[RTRD] lasts " + lastLocalLocationData.get("latitude") + " " + lastLocalLocationData.get("longitude"))
 
-        return JSONObject();
+        return lastLocalLocationData;
     }
 
     private fun scheduleLocationUpload() {
@@ -282,8 +282,10 @@ class LocationService: Service() {
 
                 if(getShareAllways()){
                     println("[RTRD] streaming location -> shareAllways:enabled")
-                    var serverMessageMock = JSONObject().put("requestor","stream").put("requested",getSavedEmail()).toString()
-                    socket.emit("streamLocation", getBucket(serverMessageMock))
+                    var serverMessageMock = JSONObject().put("requestor","device").put("requested",getSavedEmail()).toString()
+                    var bucket = getBucket(serverMessageMock)
+                    println(bucket)
+                    socket.emit("streamLocation", bucket)
                 }
 
             }
