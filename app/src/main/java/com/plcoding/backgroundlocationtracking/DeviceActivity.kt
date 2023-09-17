@@ -29,6 +29,7 @@ class DeviceActivity : ComponentActivity() {
     private lateinit var passwordEditText: EditText
     private lateinit var recordRouteCheckbox: CheckBox
     private lateinit var fallDetectionCheckbox: CheckBox
+    private lateinit var shareAllwaysCheckbox: CheckBox
     private lateinit var locationUpdateIntervalSpinner: Spinner
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,6 +44,7 @@ class DeviceActivity : ComponentActivity() {
         val savedPassword = getSavedPassword()
         val recordRoute = getRecordRoute()
         val fallDetection = getFallDetection()
+        val shareAllways = getShareAllways()
         val selectedInterval = getLocationUpdateInterval()
 
         emailEditText.setText(savedEmail)
@@ -50,11 +52,13 @@ class DeviceActivity : ComponentActivity() {
 
         recordRouteCheckbox = findViewById(R.id.recordRouteCheckbox)
         fallDetectionCheckbox = findViewById(R.id.fallDetectionCheckbox)
+        shareAllwaysCheckbox = findViewById(R.id.shareAllwaysCheckbox)
         locationUpdateIntervalSpinner = findViewById(R.id.locationUpdateIntervalSpinner)
 
         // Set the state of checkboxes and spinner
         recordRouteCheckbox.isChecked = recordRoute
         fallDetectionCheckbox.isChecked = fallDetection
+        shareAllwaysCheckbox.isChecked = shareAllways
         // Set the selected item in the spinner
         val position = resources.getStringArray(R.array.location_update_intervals).indexOf(selectedInterval)
         locationUpdateIntervalSpinner.setSelection(position)
@@ -71,6 +75,7 @@ class DeviceActivity : ComponentActivity() {
         // Initialize checkboxes and spinner
         recordRouteCheckbox = findViewById(R.id.recordRouteCheckbox)
         fallDetectionCheckbox = findViewById(R.id.fallDetectionCheckbox)
+        shareAllwaysCheckbox = findViewById(R.id.shareAllwaysCheckbox)
         locationUpdateIntervalSpinner = findViewById(R.id.locationUpdateIntervalSpinner)
     }
 
@@ -89,6 +94,9 @@ class DeviceActivity : ComponentActivity() {
     private fun getFallDetection(): Boolean {
         return sharedPreferences.getBoolean("fallDetection", false)
     }
+    private fun getShareAllways(): Boolean {
+        return sharedPreferences.getBoolean("shareAllways", false)
+    }
 
     private fun getLocationUpdateInterval(): String {
         return sharedPreferences.getString("locationUpdateInterval", "1 minute") ?: "1 minute"
@@ -101,6 +109,7 @@ class DeviceActivity : ComponentActivity() {
             putString("password", password)
             putBoolean("recordRoute", recordRouteCheckbox.isChecked)
             putBoolean("fallDetection", fallDetectionCheckbox.isChecked)
+            putBoolean("shareAllways", shareAllwaysCheckbox.isChecked)
             putString("locationUpdateInterval", locationUpdateIntervalSpinner.selectedItem.toString())
             apply()
         }

@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.annotation.RequiresApi
 import androidx.compose.ui.platform.isDebugInspectorInfoEnabled
+
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.LocationServices
 import io.socket.client.IO
@@ -45,23 +46,15 @@ class LocationService: Service() {
     private lateinit var locationClient: LocationClient
     private lateinit var socket: Socket
 
-//    private var lastLat = "!";
-//    private var lastLng = "!";
-//    private var lastAddress = "!";
-//    private var lastVacc = "!";
-//    private var lastHacc = "!";
-//    private var lastAlt = "!";
-//    private var lastSpeed = "!";
-//    private var lastSpeedAcc = "!";
 
     private var lastLocationData = JSONObject()
-        .put("latitude", "location.latitude.toString()")
-        .put("longitude", "location.longitude.toString()")
-        .put("vacc", "location.verticalAccuracyMeters.toString()")
-        .put("hacc", "location.accuracy.toString()")
-        .put("alt", "location.altitude.toString()")
-        .put("speed", "location.speed.toString()")
-        .put("speedacc", "location.speedAccuracyMetersPerSecond.toString()")
+        .put("latitude", "")
+        .put("longitude", "")
+        .put("vacc", "")
+        .put("hacc", "")
+        .put("alt", "")
+        .put("speed", "")
+        .put("speedacc", "")
 
     override fun onBind(p0: Intent?): IBinder? {
         return null
@@ -83,14 +76,45 @@ class LocationService: Service() {
     private fun getFallDetection(): Boolean {
         return sharedPreferences.getBoolean("fallDetection", false)
     }
+    private fun getShareAllways(): Boolean {
+        return sharedPreferences.getBoolean("shareAllways", false)
+    }
 
     private fun getRecordRoute(): Boolean {
         return sharedPreferences.getBoolean("recordRoute", false)
     }
 
+    private fun getAddress(lastLocalLocationData: JSONObject): String {
+        val addresses = geocoder.getFromLocation(lastLocalLocationData.getString("latitude").toDouble(), lastLocalLocationData.getString("longitude").toDouble() , 1)
+        val address = addresses?.firstOrNull()?.getAddressLine(0) ?: "Unknown"
+        println("[RTRD] Location geocoded: $address")
+        return address
+    }
+
+    private fun getSettings():JSONObject{
+        val settings = JSONObject()
+        //Set settings
+        settings.put("recordRoute", getRecordRoute())
+        settings.put("updateInterval", getLocationUpdateInterval())
+        settings.put("shareAllways", getShareAllways())
+        return settings
+    }
+
+    private fun getBucket(serverMessage: String): JSONObject {
+        val lastLocalLocationData = lastLocationData
+
+        lastLocalLocationData.put("requestor", JSONObject(serverMessage).getString(("requestor")))
+        lastLocalLocationData.put("requested", JSONObject(serverMessage).getString(("requested")))
+        lastLocalLocationData.put("settings", getSettings())
+        lastLocalLocationData.put("address", getAddress(lastLocalLocationData))
+
+        println("[RTRD] lasts " + lastLocalLocationData.get("latitude") + " " + lastLocalLocationData.get("longitude"))
+
+        return JSONObject();
+    }
 
     private fun scheduleLocationUpload() {
-        val constraints = Constraints.Builder()
+        val constraints = androidx.work.Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
 
@@ -153,38 +177,38 @@ class LocationService: Service() {
         }
     }
     private val onLocationRequested = Emitter.Listener {args ->
+        try {
+            val serverMessage = args[0].toString()
+            println("[RTRD] to/requested " + JSONObject(serverMessage).getString(("requestor")))
+            println("[RTRD] from/requestor " + JSONObject(serverMessage).getString(("requested")))
+            println("[RTRD] Someone requested my location")
+            val lastLocalLocationData = lastLocationData
+            val settings = JSONObject()
+            println("[RTRD] This is the latitude " + lastLocalLocationData.getString("latitude").isEmpty() )
+            if(lastLocalLocationData.getString("latitude").isEmpty() ||
+                lastLocalLocationData.getString("longitude").isEmpty() ||
+                lastLocalLocationData.getString("speedacc").isEmpty() ||
+                lastLocalLocationData.getString("speed").isEmpty() ||
+                lastLocalLocationData.getString("alt").isEmpty() ||
+                lastLocalLocationData.getString("hacc").isEmpty() ||
+                lastLocalLocationData.getString("vacc").isEmpty() ){
+                println("RISK UNDEFINED!")
+                socket.emit("requestedLocationFailed")
+            }else{
 
-        val serverMessage = args[0].toString()
-        println("[RTRD] to/requested " + JSONObject(serverMessage).getString(("requestor")))
-        println("[RTRD] from/requestor " + JSONObject(serverMessage).getString(("requested")))
+                //Get the bucket
+                var bucket = getBucket(serverMessage)
+                socket.emit("requestedLocation",bucket)
 
+                //TOne generator
+                val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+                toneGenerator.startTone(3)
+                toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 5000)
+            }
 
-        println("[RTRD] Someone requested my location")
-        val lastLocalLocationData = lastLocationData
-        val settings = JSONObject()
-
-        lastLocalLocationData.put("requestor", JSONObject(serverMessage).getString(("requestor")))
-        lastLocalLocationData.put("requested", JSONObject(serverMessage).getString(("requested")))
-
-        //Set settings
-        settings.put("recordRoute", getRecordRoute())
-        settings.put("updateInterval", getLocationUpdateInterval())
-        lastLocalLocationData.put("settings", settings)
-
-        println("[RTRD] lasts " + lastLocalLocationData.get("latitude") + " " + lastLocalLocationData.get("longitude"))
-        //Geocode here
-        val addresses = geocoder.getFromLocation(lastLocalLocationData.getString("latitude").toDouble(), lastLocalLocationData.getString("longitude").toDouble() , 1)
-        val address = addresses?.firstOrNull()?.getAddressLine(0) ?: "Unknown"
-        println("[RTRD] Location geocoded: $address")
-
-        lastLocalLocationData.put("address", address)
-
-        socket.emit("requestedLocation",lastLocalLocationData)
-
-        //TOne generator
-        val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
-        toneGenerator.startTone(3)
-        toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 5000)
+        }catch (e: Error){
+            socket.emit("requestedLocationFailed")
+        }
     }
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -197,13 +221,7 @@ class LocationService: Service() {
         }
         return super.onStartCommand(intent, flags, startId)
     }
-    /*override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when(intent?.action) {
-            ACTION_START -> start()
-            ACTION_STOP -> stop()
-        }
-        return super.onStartCommand(intent, flags, startId)
-    }*/
+
     private fun formatAddress(address: Address): String {
         val lines = mutableListOf<String>()
 
@@ -235,8 +253,7 @@ class LocationService: Service() {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         locationClient
-//            .getLocationUpdates(120000L)
-            .getLocationUpdates(getLocationUpdateInterval())
+            .getLocationUpdates(5000L)
             .catch { e -> e.printStackTrace() }
             .onEach { location ->
 
@@ -257,26 +274,12 @@ class LocationService: Service() {
                     .put("speed", location.speed.toString())
                     .put("speedacc", location.speedAccuracyMetersPerSecond.toString())
 
+                if(getShareAllways()){
+                    println("[RTRD] streaming location -> shareAllways:enabled")
+                    var serverMessageMock = JSONObject().put("requestor","stream").put("requested",getSavedEmail()).toString()
+                    socket.emit("streamLocation", getBucket(serverMessageMock))
+                }
 
-                //LOCATION COMPUTE STOP
-
-
-//                val url = "https://locationsocket.jmjdrwrk.repl.co/location"
-//
-//
-//                val requestBody = lastLocationData.toString().toRequestBody("application/json".toMediaTypeOrNull())
-//
-//                val request = Request.Builder()
-//                    .url(url)
-//                    .post(requestBody)
-//                    .build()
-//
-//                val client = OkHttpClient()
-//                client.newCall(request).execute().use { response ->
-//                    if (!response.isSuccessful) {
-//                        // Handle the error if the request was not successful
-//                    }
-//                }
             }
             .launchIn(serviceScope)
 
@@ -303,3 +306,23 @@ class LocationService: Service() {
         const val ACTION_STOP = "ACTION_STOP"
     }
 }
+
+//LOCATION COMPUTE STOP
+
+
+//                val url = "https://locationsocket.jmjdrwrk.repl.co/location"
+//
+//
+//                val requestBody = lastLocationData.toString().toRequestBody("application/json".toMediaTypeOrNull())
+//
+//                val request = Request.Builder()
+//                    .url(url)
+//                    .post(requestBody)
+//                    .build()
+//
+//                val client = OkHttpClient()
+//                client.newCall(request).execute().use { response ->
+//                    if (!response.isSuccessful) {
+//                        // Handle the error if the request was not successful
+//                    }
+//                }
