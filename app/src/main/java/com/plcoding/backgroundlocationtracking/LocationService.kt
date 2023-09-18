@@ -34,8 +34,11 @@ import org.json.JSONArray
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 
-class LocationService: Service() {
+import android.os.PowerManager
 
+
+class LocationService: Service() {
+    private lateinit var wakeLock: PowerManager.WakeLock
     private val geocoder: Geocoder by lazy { Geocoder(applicationContext) }
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var locationClient: LocationClient
@@ -84,6 +87,7 @@ class LocationService: Service() {
     private fun getRouteName(): String {
         return sharedPreferences.getString("routeName", "unamed") ?: "unamed"
     }
+
     fun calculateStats(data: List<FloatArray>): Triple<FloatArray, FloatArray, FloatArray> {
         val numAxes = data[0].size
         val maxValues = FloatArray(numAxes) { Float.MIN_VALUE }
@@ -100,8 +104,6 @@ class LocationService: Service() {
         }
 
         val averages = FloatArray(numAxes) { sumValues[it] / data.size }
-
-
         return Triple(minValues, maxValues, averages)
     }
 
@@ -171,6 +173,12 @@ class LocationService: Service() {
 
     override fun onCreate() {
         super.onCreate()
+
+        // Initialize the wake lock
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyApp::LocationServiceWakeLock")
+        wakeLock.acquire()
+
         sharedPreferences = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
         gyroscopeClient = GyroscopeClient(applicationContext)
 
@@ -295,7 +303,7 @@ class LocationService: Service() {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         locationClient
-            .getLocationUpdates(5000L)
+            .getLocationUpdates(2500L)
             .catch { e -> e.printStackTrace() }
             .onEach { location ->
 
@@ -340,11 +348,18 @@ class LocationService: Service() {
                     toneGenerator.startTone(3)
                     toneGenerator.startTone(ToneGenerator.TONE_CDMA_ANSWER, 10000)
                     crashed = true
-
-                    socket.emit("crashDetected", JSONObject()
-                        .put("x",gyroData[0].toFloat())
-                        .put("y",gyroData[1].toFloat())
-                        .put("z",gyroData[2].toFloat())
+                    val lastAccel = lastAccelData[lastAccelData.size-1]
+                    socket.emit("crashDetected", getBucket(
+                        JSONObject()
+                        .put("requestor","device")
+                        .put("requested", getSavedEmail()).toString()
+                        ).put("instance",JSONObject()
+                        .put("gx",gyroData[0].toFloat())
+                        .put("gy",gyroData[1].toFloat())
+                        .put("gz",gyroData[2].toFloat())
+                        .put("ax",lastAccel[0].toFloat())
+                        .put("ay",lastAccel[1].toFloat())
+                        .put("az",lastAccel[2].toFloat()))
                     )
                 }
 
@@ -374,6 +389,7 @@ class LocationService: Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        wakeLock.release()
         serviceScope.cancel()
     }
 
