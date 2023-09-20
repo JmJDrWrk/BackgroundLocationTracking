@@ -110,6 +110,7 @@ class LocationService: Service() {
     }
 
     private fun getAddress(lastLocalLocationData: JSONObject): String {
+//        https://stackoverflow.com/questions/73456748/geocoder-getfromlocation-deprecated
         val addresses = geocoder.getFromLocation(lastLocalLocationData.getString("latitude").toDouble(), lastLocalLocationData.getString("longitude").toDouble() , 1)
         val address = addresses?.firstOrNull()?.getAddressLine(0) ?: "Unknown"
         println("[RTRD] Location geocoded: $address")
@@ -386,7 +387,7 @@ class LocationService: Service() {
         socket.disconnect()
         socket.on(Socket.EVENT_DISCONNECT) {
             // This code will be executed when the disconnection is successful
-            stopForeground(true)
+            stopForeground(STOP_FOREGROUND_DETACH)
             stopSelf()
         }
 
