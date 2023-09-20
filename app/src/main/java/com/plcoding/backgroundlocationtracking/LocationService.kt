@@ -305,7 +305,7 @@ class LocationService: Service() {
         // Create an intent that opens your app
         val openAppIntent = Intent(this, MainActivity::class.java) // Replace YourMainActivity::class.java with your actual main activity
         openAppIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        val pendingIntent = PendingIntent.getActivity(this, 0, openAppIntent, PendingIntent.FLAG_UPDATE_CURRENT)
+        val pendingIntent = PendingIntent.getActivity(this, 0, openAppIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
         val notification = NotificationCompat.Builder(this, "location")
             .setContentTitle("Tracking location...")
