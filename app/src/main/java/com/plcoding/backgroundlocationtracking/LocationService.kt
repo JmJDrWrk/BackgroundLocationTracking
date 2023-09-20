@@ -2,6 +2,7 @@ package com.plcoding.backgroundlocationtracking
 
 
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -300,11 +301,18 @@ class LocationService: Service() {
     }
     @RequiresApi(Build.VERSION_CODES.O)
     private fun start() {
+
+        // Create an intent that opens your app
+        val openAppIntent = Intent(this, MainActivity::class.java) // Replace YourMainActivity::class.java with your actual main activity
+        openAppIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        val pendingIntent = PendingIntent.getActivity(this, 0, openAppIntent, PendingIntent.FLAG_UPDATE_CURRENT)
+
         val notification = NotificationCompat.Builder(this, "location")
             .setContentTitle("Tracking location...")
             .setContentText("Location: null")
             .setSmallIcon(R.drawable.ic_launcher_background)
             .setOngoing(true)
+            .setContentIntent(pendingIntent)
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
