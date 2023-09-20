@@ -36,6 +36,8 @@ import java.util.concurrent.TimeUnit
 
 import android.os.PowerManager
 
+import org.threeten.bp.LocalDateTime
+import org.threeten.bp.format.DateTimeFormatter
 
 class LocationService: Service() {
     private lateinit var wakeLock: PowerManager.WakeLock
@@ -116,7 +118,6 @@ class LocationService: Service() {
 
     private fun getSettings():JSONObject{
         val settings = JSONObject()
-        //Set settings
         settings.put("recordRoute", getRecordRoute())
         settings.put("updateInterval", getLocationUpdateInterval())
         settings.put("shareAllways", getShareAllways())
@@ -133,6 +134,13 @@ class LocationService: Service() {
         lastLocalLocationData.put("requested", JSONObject(serverMessage).getString(("requested")))
         lastLocalLocationData.put("settings", getSettings())
         lastLocalLocationData.put("address", getAddress(lastLocalLocationData))
+
+        // Get current date and time
+        val currentDateTime = org.threeten.bp.LocalDateTime.now()
+        val formattedDateTime = currentDateTime.format(org.threeten.bp.format.DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
+        // Assuming lastLocalLocationData is a Map<String, String>
+        lastLocalLocationData.put("instant", formattedDateTime)
+
 
         println("[RTRD] lasts " + lastLocalLocationData.get("latitude") + " " + lastLocalLocationData.get("longitude"))
         val (minGyro, maxGyro, avgGyro) = calculateStats(lastGyroData)
@@ -184,10 +192,7 @@ class LocationService: Service() {
 
         // Initialize the socket
         println("[RTRD] Initizalizing socketIo connection")
-        val authParameters = mapOf(
-            "email" to "jroman@ruttradar.com",
-            "pass" to "123"
-        )
+
         socket = IO.socket("https://locationsocket.jmjdrwrk.repl.co/?mode=certified-ruttradar-device", IO.Options().apply {
             transports = arrayOf(WebSocket.NAME)
             isDebugInspectorInfoEnabled = true
@@ -303,7 +308,7 @@ class LocationService: Service() {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         locationClient
-            .getLocationUpdates(2500L)
+            .getLocationUpdates(1000L)
             .catch { e -> e.printStackTrace() }
             .onEach { location ->
 
