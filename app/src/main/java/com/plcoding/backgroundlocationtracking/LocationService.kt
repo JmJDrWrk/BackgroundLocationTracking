@@ -1,13 +1,11 @@
 package com.plcoding.backgroundlocationtracking
 
-
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.location.Address
 import android.location.Geocoder
 import android.media.AudioManager
 import android.media.ToneGenerator
@@ -15,7 +13,6 @@ import android.os.Build
 import android.os.IBinder
 import androidx.annotation.RequiresApi
 import androidx.compose.ui.platform.isDebugInspectorInfoEnabled
-
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.LocationServices
 import io.socket.client.IO
@@ -27,21 +24,12 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import org.json.JSONObject
-
-//import androidx.work.NetworkType
-//import androidx.work.PeriodicWorkRequest
-//import androidx.work.WorkManager
-import org.json.JSONArray
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.TimeUnit
-
 import android.os.PowerManager
 
-import org.threeten.bp.LocalDateTime
-import org.threeten.bp.format.DateTimeFormatter
 
-class LocationService: Service() {
-    private val NOTIFICATION_ID= 1
+class LocationService : Service() {
+    private val NOTIFICATION_ID = 1
     private lateinit var wakeLock: PowerManager.WakeLock
     private val geocoder: Geocoder by lazy { Geocoder(applicationContext) }
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -64,6 +52,7 @@ class LocationService: Service() {
     override fun onBind(p0: Intent?): IBinder? {
         return null
     }
+
     private lateinit var sharedPreferences: SharedPreferences
 
     private fun getSavedEmail(): String {
@@ -81,12 +70,15 @@ class LocationService: Service() {
     private fun getFallDetection(): Boolean {
         return sharedPreferences.getBoolean("fallDetection", false)
     }
+
     private fun getShareAllways(): Boolean {
         return sharedPreferences.getBoolean("shareAllways", false)
     }
+
     private fun getCrashDetection(): Boolean {
         return sharedPreferences.getBoolean("crashDetection", false)
     }
+
     private fun getRecordRoute(): Boolean {
         return sharedPreferences.getBoolean("recordRoute", false)
     }
@@ -116,13 +108,17 @@ class LocationService: Service() {
 
     private fun getAddress(lastLocalLocationData: JSONObject): String {
 //        https://stackoverflow.com/questions/73456748/geocoder-getfromlocation-deprecated
-        val addresses = geocoder.getFromLocation(lastLocalLocationData.getString("latitude").toDouble(), lastLocalLocationData.getString("longitude").toDouble() , 1)
+        val addresses = geocoder.getFromLocation(
+            lastLocalLocationData.getString("latitude").toDouble(),
+            lastLocalLocationData.getString("longitude").toDouble(),
+            1
+        )
         val address = addresses?.firstOrNull()?.getAddressLine(0) ?: "Unknown"
         println("[RTRD] Location geocoded: $address")
         return address
     }
 
-    private fun getSettings():JSONObject{
+    private fun getSettings(): JSONObject {
         val settings = JSONObject()
         settings.put("recordRoute", getRecordRoute())
         settings.put("updateInterval", getLocationUpdateInterval())
@@ -144,56 +140,73 @@ class LocationService: Service() {
 
             // Get current date and time
             val currentDateTime = org.threeten.bp.LocalDateTime.now()
-            val formattedDateTime = currentDateTime.format(org.threeten.bp.format.DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
+            val formattedDateTime =
+                currentDateTime.format(org.threeten.bp.format.DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
             // Assuming lastLocalLocationData is a Map<String, String>
             lastLocalLocationData.put("instant", formattedDateTime)
 
 
-            println("[RTRD] lasts " + lastLocalLocationData.get("latitude") + " " + lastLocalLocationData.get("longitude"))
+            println(
+                "[RTRD] lasts " + lastLocalLocationData.get("latitude") + " " + lastLocalLocationData.get(
+                    "longitude"
+                )
+            )
             val (minGyro, maxGyro, avgGyro) = calculateStats(lastGyroData)
             val (minAccel, maxAccel, avgAccel) = calculateStats(lastAccelData)
 
             val gyroData = JSONObject()
-                .put("x", JSONObject().put("min",minGyro[0].toFloat() ).put("max", maxGyro[0].toFloat() ).put("avg", avgGyro[0].toFloat() ))
-                .put("y", JSONObject().put("min",minGyro[1].toFloat() ).put("max", maxGyro[1].toFloat() ).put("avg", avgGyro[1].toFloat() ))
-                .put("z", JSONObject().put("min",minGyro[2].toFloat() ).put("max", maxGyro[2].toFloat() ).put("avg", avgGyro[2].toFloat() ))
+                .put(
+                    "x",
+                    JSONObject().put("min", minGyro[0].toFloat()).put("max", maxGyro[0].toFloat())
+                        .put("avg", avgGyro[0].toFloat())
+                )
+                .put(
+                    "y",
+                    JSONObject().put("min", minGyro[1].toFloat()).put("max", maxGyro[1].toFloat())
+                        .put("avg", avgGyro[1].toFloat())
+                )
+                .put(
+                    "z",
+                    JSONObject().put("min", minGyro[2].toFloat()).put("max", maxGyro[2].toFloat())
+                        .put("avg", avgGyro[2].toFloat())
+                )
 
             val accelData = JSONObject()
-                .put("x", JSONObject().put("min",minAccel[0]).put("max", maxAccel[0]).put("avg", avgAccel[0]))
-                .put("y", JSONObject().put("min",minAccel[1]).put("max", maxAccel[1]).put("avg", avgAccel[1]))
-                .put("z", JSONObject().put("min",minAccel[2]).put("max", maxAccel[2]).put("avg", avgAccel[2]))
+                .put(
+                    "x",
+                    JSONObject().put("min", minAccel[0]).put("max", maxAccel[0])
+                        .put("avg", avgAccel[0])
+                )
+                .put(
+                    "y",
+                    JSONObject().put("min", minAccel[1]).put("max", maxAccel[1])
+                        .put("avg", avgAccel[1])
+                )
+                .put(
+                    "z",
+                    JSONObject().put("min", minAccel[2]).put("max", maxAccel[2])
+                        .put("avg", avgAccel[2])
+                )
 
 //        lastLocalLocationData.put("accelerometer", accelData)
             lastLocalLocationData.put("gyroscope", gyroData)
             lastAccelData = CopyOnWriteArrayList<FloatArray>()
             lastGyroData = CopyOnWriteArrayList<FloatArray>()
-        }catch (e:Error){
-            lastLocalLocationData.put("error","[RTRD]" + e)
+        } catch (e: Error) {
+            lastLocalLocationData.put("error", e.toString())
         }
         return lastLocalLocationData;
     }
-
-    /*private fun scheduleLocationUpload() {
-        val constraints = androidx.work.Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
-
-        val periodicWorkRequest = PeriodicWorkRequest.Builder(
-            LocationUploadWorker::class.java,
-            15, TimeUnit.MINUTES
-        )
-            .setConstraints(constraints)
-            .build()
-
-        WorkManager.getInstance(this).enqueue(periodicWorkRequest)
-    }*/
 
     override fun onCreate() {
         super.onCreate()
 
         // Initialize the wake lock
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MyApp::LocationServiceWakeLock")
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "MyApp::LocationServiceWakeLock"
+        )
         wakeLock.acquire()
 
         sharedPreferences = getSharedPreferences("AppPrefs", Context.MODE_PRIVATE)
@@ -202,32 +215,35 @@ class LocationService: Service() {
         // Initialize the socket
         println("[RTRD] Initizalizing socketIo connection")
 
-        socket = IO.socket("https://locationsocket.jmjdrwrk.repl.co/?mode=certified-ruttradar-device", IO.Options().apply {
-            transports = arrayOf(WebSocket.NAME)
-            isDebugInspectorInfoEnabled = true
-            auth = mapOf(
-                "email" to getSavedEmail(),
-                "password" to getSavedPassword()
-            )
-        })
+        socket = IO.socket(
+            "https://locationsocket.jmjdrwrk.repl.co/?mode=certified-ruttradar-device",
+            IO.Options().apply {
+                transports = arrayOf(WebSocket.NAME)
+                isDebugInspectorInfoEnabled = true
+                auth = mapOf(
+                    "email" to getSavedEmail(),
+                    "password" to getSavedPassword()
+                )
+            })
 
         socket.connect()
         socket.on(Socket.EVENT_CONNECT) {
-            socket.emit("handshake", "Hello, server!")
+            socket.emit("handshake", JSONObject().put("requested",getSavedEmail()))
             println("[RTRD] Handshake to server emitted")
         }
         socket.on(Socket.EVENT_CONNECT_ERROR) {
             val exception = it[0] as Exception
             println("[RTRD] Socket connection error: ${exception.message}")
         }
-       socket.on("emitMyLocation", onLocationRequested)
-       socket.on("serverHandshake", onServerHandshake)
-       socket.on("authError", onAuthError)
+        socket.on("emitMyLocation", onLocationRequested)
+        socket.on("serverHandshake", onServerHandshake)
+        socket.on("authError", onAuthError)
         locationClient = DefaultLocationClient(
             applicationContext,
             LocationServices.getFusedLocationProviderClient(applicationContext)
         )
     }
+
     private val onAuthError = Emitter.Listener { args ->
         val serverMessage = args[0].toString()
         println("[RTRD] SERVER RESPONSE: " + serverMessage)
@@ -239,7 +255,7 @@ class LocationService: Service() {
             println("[RTRD] Server said: $serverMessage")
         }
     }
-    private val onLocationRequested = Emitter.Listener {args ->
+    private val onLocationRequested = Emitter.Listener { args ->
         try {
             val serverMessage = args[0].toString()
             println("[RTRD] to/requested " + JSONObject(serverMessage).getString(("requestor")))
@@ -247,21 +263,35 @@ class LocationService: Service() {
             println("[RTRD] Someone requested my location")
             val lastLocalLocationData = lastLocationData
             val settings = JSONObject()
-            println("[RTRD] This is the latitude " + lastLocalLocationData.getString("latitude").isEmpty() )
-            if(lastLocalLocationData.getString("latitude").isEmpty() ||
+            println(
+                "[RTRD] This is the latitude " + lastLocalLocationData.getString("latitude")
+                    .isEmpty()
+            )
+            if (lastLocalLocationData.getString("latitude").isEmpty() ||
                 lastLocalLocationData.getString("longitude").isEmpty() ||
                 lastLocalLocationData.getString("speedacc").isEmpty() ||
                 lastLocalLocationData.getString("speed").isEmpty() ||
                 lastLocalLocationData.getString("alt").isEmpty() ||
                 lastLocalLocationData.getString("hacc").isEmpty() ||
-                lastLocalLocationData.getString("vacc").isEmpty() ){
+                lastLocalLocationData.getString("vacc").isEmpty()
+            ) {
                 println("[RTRD] RISK UNDEFINED!")
-                socket.emit("requestedLocationFailed", JSONObject().put("error","[RTRD]" + lastLocalLocationData.get("error")))
-            }else{
+                try {
+                    socket.emit(
+                        "requestedLocationFailed",
+                        JSONObject().put("error", lastLocalLocationData.getString("error"))
+                    )
+                } catch (e2: Error) {
+                    socket.emit(
+                        "requestedLocationFailed",
+                        JSONObject().put("error", "[RTRD] [GETSTRING ERROR]")
+                    )
+                }
+            } else {
 
                 //Get the bucket
                 var bucket = getBucket(serverMessage)
-                socket.emit("requestedLocation",bucket)
+                socket.emit("requestedLocation", bucket)
 
                 //TOne generator
                 val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
@@ -269,9 +299,19 @@ class LocationService: Service() {
                 toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 5000)
             }
 
-        }catch (e: Error){
-            println("[RTRD]" +e)
-            socket.emit("requestedLocationFailed", JSONObject().put("error","[RTRD]" +e))
+        } catch (e: Error) {
+            try {
+                socket.emit(
+                    "requestedLocationFailed",
+                    JSONObject().put("error onLocationRequested", e.toString())
+                )
+            } catch (e2: Error) {
+                socket.emit(
+                    "requestedLocationFailed",
+                    JSONObject().put("error", "[RTRD] [GETBUCKET ERROR]")
+                )
+            }
+
         }
     }
 
@@ -280,21 +320,27 @@ class LocationService: Service() {
         when (intent?.action) {
             ACTION_START -> {
                 start()
-                //scheduleLocationUpload() // Schedule the periodic work
             }
             ACTION_STOP -> stop()
         }
         return super.onStartCommand(intent, flags, startId)
     }
 
-
     @RequiresApi(Build.VERSION_CODES.O)
     private fun start() {
 
         // Create an intent that opens your app
-        val openAppIntent = Intent(this, MainActivity::class.java) // Replace YourMainActivity::class.java with your actual main activity
+        val openAppIntent = Intent(
+            this,
+            MainActivity::class.java
+        ) // Replace YourMainActivity::class.java with your actual main activity
         openAppIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        val pendingIntent = PendingIntent.getActivity(this, 0, openAppIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 
         val notification = NotificationCompat.Builder(this, "location")
             .setContentTitle("Tracking location...")
@@ -312,7 +358,7 @@ class LocationService: Service() {
 
                 //LOCATION COMPUTE START
                 println(location)
-                
+
                 val lat = location.latitude.toString().takeLast(3)
                 val long = location.longitude.toString().takeLast(3)
                 val updatedNotification = notification.setContentText("Location: ($lat, $long)")
@@ -327,69 +373,75 @@ class LocationService: Service() {
                     .put("speed", location.speed.toString())
                     .put("speedacc", location.speedAccuracyMetersPerSecond.toString())
 
-                if(getShareAllways()){
-                    println("[RTRD] streaming location -> shareAllways:enabled")
-                    var serverMessageMock = JSONObject().put("requestor","device").put("requested",getSavedEmail()).toString()
-                    var bucket = getBucket(serverMessageMock)
-                    println(bucket)
-                    socket.emit("streamLocation", bucket)
-                }
-                else if(!firstTimeSettings){
-                    println("[RTRD] sending location only one time-> shareAllways:disabled")
-                    var serverMessageMock = JSONObject().put("requestor","device").put("requested",getSavedEmail()).toString()
-                    var bucket = getBucket(serverMessageMock)
-                    println(bucket)
-                    socket.emit("streamLocation", bucket)
-                    firstTimeSettings=true
-                }
+                    if (getShareAllways()) {
+                        println("[RTRD] streaming location -> shareAllways:enabled")
+                        var serverMessageMock =
+                            JSONObject().put("requestor", "device").put("requested", getSavedEmail())
+                                .toString()
+                        var bucket = getBucket(serverMessageMock)
+                        println(bucket)
+                        if (getRecordRoute()) {
+                            socket.emit("streamLocation", bucket)
+                        }
 
-            }
-            .launchIn(serviceScope)
-
-        if(getCrashDetection()){
-            gyroscopeClient.getGyroscopeData()
-                .onEach { gyroData ->
-                    lastGyroData.add(gyroData)
-                    // Do something with gyroData (FloatArray)
-                    // gyroData[0] -> x-axis, gyroData[1] -> y-axis, gyroData[2] -> z-axis
-//                println("[RTRD] [gyro] x: " + gyroData[1] + " y: "+  gyroData[2])
-                    // Check if any axis exceeds 10
-                    if (gyroData[0].toFloat() > 8 || gyroData[1].toFloat()  > 8 || gyroData[2].toFloat()  > 8) {
-                        //TOne generator
-                        val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
-                        toneGenerator.startTone(3)
-                        toneGenerator.startTone(ToneGenerator.TONE_CDMA_ANSWER, 10000)
-                        crashed = true
-                        val lastAccel = lastAccelData[lastAccelData.size-1]
-                        socket.emit("crashDetected", getBucket(
-                            JSONObject()
-                                .put("requestor","device")
-                                .put("requested", getSavedEmail()).toString()
-                        ).put("instance",JSONObject()
-                            .put("gx",gyroData[0].toFloat())
-                            .put("gy",gyroData[1].toFloat())
-                            .put("gz",gyroData[2].toFloat())
-                            .put("ax",lastAccel[0].toFloat())
-                            .put("ay",lastAccel[1].toFloat())
-                            .put("az",lastAccel[2].toFloat()))
-                        )
+                    } else if (!firstTimeSettings) {
+                        println("[RTRD] sending location only one time-> shareAllways:disabled")
+                        var serverMessageMock = JSONObject().put("requestor", "device")
+                            .put("requested", getSavedEmail()).toString()
+                        var bucket = getBucket(serverMessageMock)
+                        println(bucket)
+                        socket.emit("streamLocation", bucket)
+                        firstTimeSettings = true
                     }
 
                 }
-                .launchIn(serviceScope)
+                    .launchIn(serviceScope)
 
-            gyroscopeClient.getAccelerometerData()
-                .onEach { accelData ->
-                    lastAccelData.add(accelData)
-                    // Do something with accelData (FloatArray)
-                    // accelData[0] -> x-axis, accelData[1] -> y-axis, accelData[2] -> z-axis
-                    // println("[RTRD] [accel] x: " + accelData[1] + " y: "+  accelData[2])
+                if (getCrashDetection()) {
+                    gyroscopeClient.getGyroscopeData()
+                        .onEach { gyroData ->
+                            lastGyroData.add(gyroData)
+                            // Check if any axis exceeds 10
+                            if (gyroData[0].toFloat() > 8 || gyroData[1].toFloat() > 8 || gyroData[2].toFloat() > 8) {
+                                //TOne generator
+                                val toneGenerator =
+                                    ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+                                toneGenerator.startTone(3)
+                                toneGenerator.startTone(ToneGenerator.TONE_CDMA_ANSWER, 10000)
+                                crashed = true
+                                val lastAccel = lastAccelData[lastAccelData.size - 1]
+                                socket.emit(
+                                    "crashDetected", getBucket(
+                                        JSONObject()
+                                            .put("requestor", "device")
+                                            .put("requested", getSavedEmail()).toString()
+                                    ).put(
+                                        "instance", JSONObject()
+                                            .put("gx", gyroData[0].toFloat())
+                                            .put("gy", gyroData[1].toFloat())
+                                            .put("gz", gyroData[2].toFloat())
+                                            .put("ax", lastAccel[0].toFloat())
+                                            .put("ay", lastAccel[1].toFloat())
+                                            .put("az", lastAccel[2].toFloat())
+                                    )
+                                )
+                            }
+
+                        }
+                        .launchIn(serviceScope)
+
+                    gyroscopeClient.getAccelerometerData()
+                        .onEach { accelData ->
+                            lastAccelData.add(accelData)
+                            // Do something with accelData (FloatArray)
+                            // accelData[0] -> x-axis, accelData[1] -> y-axis, accelData[2] -> z-axis
+                            // println("[RTRD] [accel] x: " + accelData[1] + " y: "+  accelData[2])
+                        }
+                        .launchIn(serviceScope)
                 }
-                .launchIn(serviceScope)
-        }
 
-        startForeground(NOTIFICATION_ID, notification.build())
-    }
+                startForeground(NOTIFICATION_ID, notification.build())
+            }
 
         private fun stop() {
             socket.disconnect()
@@ -403,15 +455,15 @@ class LocationService: Service() {
 
         }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        wakeLock.release()
-        serviceScope.cancel()
-    }
+        override fun onDestroy() {
+            super.onDestroy()
+            wakeLock.release()
+            serviceScope.cancel()
+        }
 
-    companion object {
-        const val ACTION_START = "ACTION_START"
-        const val ACTION_STOP = "ACTION_STOP"
-        const val EXTRA_ROUTE_NAME = "route_name"
+        companion object {
+            const val ACTION_START = "ACTION_START"
+            const val ACTION_STOP = "ACTION_STOP"
+            const val EXTRA_ROUTE_NAME = "route_name"
+        }
     }
-}
