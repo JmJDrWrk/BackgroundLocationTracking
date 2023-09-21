@@ -77,6 +77,7 @@ class MainActivity : ComponentActivity() {
             alertDialog.show()
         }else{
             println("[RTRD] This rutt is not going to be recorded")
+            startLocationService()
         }
     }
 
@@ -94,8 +95,13 @@ class MainActivity : ComponentActivity() {
                 startService(this)
             }
         } else {
+            println("[RTRD] Route name is null")
             // Handle the case where routeName is empty or null
             // You may want to show a toast or display an error message
+            Intent(applicationContext, LocationService::class.java).apply {
+                action = LocationService.ACTION_START
+                startService(this)
+            }
         }
     }
 }

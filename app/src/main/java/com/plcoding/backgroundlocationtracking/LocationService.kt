@@ -28,9 +28,9 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import org.json.JSONObject
 
-import androidx.work.NetworkType
-import androidx.work.PeriodicWorkRequest
-import androidx.work.WorkManager
+//import androidx.work.NetworkType
+//import androidx.work.PeriodicWorkRequest
+//import androidx.work.WorkManager
 import org.json.JSONArray
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
@@ -41,6 +41,7 @@ import org.threeten.bp.LocalDateTime
 import org.threeten.bp.format.DateTimeFormatter
 
 class LocationService: Service() {
+    private val NOTIFICATION_ID= 1
     private lateinit var wakeLock: PowerManager.WakeLock
     private val geocoder: Geocoder by lazy { Geocoder(applicationContext) }
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -50,6 +51,7 @@ class LocationService: Service() {
     private lateinit var socket: Socket
     private var lastAccelData = CopyOnWriteArrayList<FloatArray>()
     private var lastGyroData = CopyOnWriteArrayList<FloatArray>()
+    private lateinit var notificationManager: NotificationManager
     private var lastLocationData = JSONObject()
         .put("latitude", "")
         .put("longitude", "")
@@ -82,7 +84,9 @@ class LocationService: Service() {
     private fun getShareAllways(): Boolean {
         return sharedPreferences.getBoolean("shareAllways", false)
     }
-
+    private fun getCrashDetection(): Boolean {
+        return sharedPreferences.getBoolean("crashDetection", false)
+    }
     private fun getRecordRoute(): Boolean {
         return sharedPreferences.getBoolean("recordRoute", false)
     }
@@ -129,44 +133,47 @@ class LocationService: Service() {
     }
 
     private fun getBucket(serverMessage: String): JSONObject {
-
         val lastLocalLocationData = lastLocationData
-
         lastLocalLocationData.put("requestor", JSONObject(serverMessage).getString(("requestor")))
         lastLocalLocationData.put("requested", JSONObject(serverMessage).getString(("requested")))
         lastLocalLocationData.put("settings", getSettings())
-        lastLocalLocationData.put("address", getAddress(lastLocalLocationData))
 
-        // Get current date and time
-        val currentDateTime = org.threeten.bp.LocalDateTime.now()
-        val formattedDateTime = currentDateTime.format(org.threeten.bp.format.DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
-        // Assuming lastLocalLocationData is a Map<String, String>
-        lastLocalLocationData.put("instant", formattedDateTime)
+        try {
+
+            lastLocalLocationData.put("address", getAddress(lastLocalLocationData))
+
+            // Get current date and time
+            val currentDateTime = org.threeten.bp.LocalDateTime.now()
+            val formattedDateTime = currentDateTime.format(org.threeten.bp.format.DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
+            // Assuming lastLocalLocationData is a Map<String, String>
+            lastLocalLocationData.put("instant", formattedDateTime)
 
 
-        println("[RTRD] lasts " + lastLocalLocationData.get("latitude") + " " + lastLocalLocationData.get("longitude"))
-        val (minGyro, maxGyro, avgGyro) = calculateStats(lastGyroData)
-        val (minAccel, maxAccel, avgAccel) = calculateStats(lastAccelData)
+            println("[RTRD] lasts " + lastLocalLocationData.get("latitude") + " " + lastLocalLocationData.get("longitude"))
+            val (minGyro, maxGyro, avgGyro) = calculateStats(lastGyroData)
+            val (minAccel, maxAccel, avgAccel) = calculateStats(lastAccelData)
 
-        val gyroData = JSONObject()
-            .put("x", JSONObject().put("min",minGyro[0].toFloat() ).put("max", maxGyro[0].toFloat() ).put("avg", avgGyro[0].toFloat() ))
-            .put("y", JSONObject().put("min",minGyro[1].toFloat() ).put("max", maxGyro[1].toFloat() ).put("avg", avgGyro[1].toFloat() ))
-            .put("z", JSONObject().put("min",minGyro[2].toFloat() ).put("max", maxGyro[2].toFloat() ).put("avg", avgGyro[2].toFloat() ))
+            val gyroData = JSONObject()
+                .put("x", JSONObject().put("min",minGyro[0].toFloat() ).put("max", maxGyro[0].toFloat() ).put("avg", avgGyro[0].toFloat() ))
+                .put("y", JSONObject().put("min",minGyro[1].toFloat() ).put("max", maxGyro[1].toFloat() ).put("avg", avgGyro[1].toFloat() ))
+                .put("z", JSONObject().put("min",minGyro[2].toFloat() ).put("max", maxGyro[2].toFloat() ).put("avg", avgGyro[2].toFloat() ))
 
-        val accelData = JSONObject()
-            .put("x", JSONObject().put("min",minAccel[0]).put("max", maxAccel[0]).put("avg", avgAccel[0]))
-            .put("y", JSONObject().put("min",minAccel[1]).put("max", maxAccel[1]).put("avg", avgAccel[1]))
-            .put("z", JSONObject().put("min",minAccel[2]).put("max", maxAccel[2]).put("avg", avgAccel[2]))
+            val accelData = JSONObject()
+                .put("x", JSONObject().put("min",minAccel[0]).put("max", maxAccel[0]).put("avg", avgAccel[0]))
+                .put("y", JSONObject().put("min",minAccel[1]).put("max", maxAccel[1]).put("avg", avgAccel[1]))
+                .put("z", JSONObject().put("min",minAccel[2]).put("max", maxAccel[2]).put("avg", avgAccel[2]))
 
 //        lastLocalLocationData.put("accelerometer", accelData)
-        lastLocalLocationData.put("gyroscope", gyroData)
-        lastAccelData = CopyOnWriteArrayList<FloatArray>()
-        lastGyroData = CopyOnWriteArrayList<FloatArray>()
-
+            lastLocalLocationData.put("gyroscope", gyroData)
+            lastAccelData = CopyOnWriteArrayList<FloatArray>()
+            lastGyroData = CopyOnWriteArrayList<FloatArray>()
+        }catch (e:Error){
+            lastLocalLocationData.put("error","[RTRD]" + e)
+        }
         return lastLocalLocationData;
     }
 
-    private fun scheduleLocationUpload() {
+    /*private fun scheduleLocationUpload() {
         val constraints = androidx.work.Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
@@ -179,7 +186,7 @@ class LocationService: Service() {
             .build()
 
         WorkManager.getInstance(this).enqueue(periodicWorkRequest)
-    }
+    }*/
 
     override fun onCreate() {
         super.onCreate()
@@ -249,7 +256,7 @@ class LocationService: Service() {
                 lastLocalLocationData.getString("hacc").isEmpty() ||
                 lastLocalLocationData.getString("vacc").isEmpty() ){
                 println("[RTRD] RISK UNDEFINED!")
-                socket.emit("requestedLocationFailed")
+                socket.emit("requestedLocationFailed", JSONObject().put("error","[RTRD]" + lastLocalLocationData.get("error")))
             }else{
 
                 //Get the bucket
@@ -264,41 +271,23 @@ class LocationService: Service() {
 
         }catch (e: Error){
             println("[RTRD]" +e)
-            socket.emit("requestedLocationFailed")
+            socket.emit("requestedLocationFailed", JSONObject().put("error","[RTRD]" +e))
         }
     }
+
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
                 start()
-                scheduleLocationUpload() // Schedule the periodic work
+                //scheduleLocationUpload() // Schedule the periodic work
             }
             ACTION_STOP -> stop()
         }
         return super.onStartCommand(intent, flags, startId)
     }
 
-    private fun formatAddress(address: Address): String {
-        val lines = mutableListOf<String>()
 
-        // Add the address lines
-        for (i in 0..address.maxAddressLineIndex) {
-            lines.add(address.getAddressLine(i))
-        }
-
-        // Add the locality, if available
-        address.locality?.let { lines.add(it) }
-
-        // Add the postal code, if available
-        address.postalCode?.let { lines.add(it) }
-
-        // Add the country name, if available
-        address.countryName?.let { lines.add(it) }
-
-        // Join all the lines into a single string
-        return lines.joinToString(separator = ", ")
-    }
     @RequiresApi(Build.VERSION_CODES.O)
     private fun start() {
 
@@ -314,8 +303,8 @@ class LocationService: Service() {
             .setOngoing(true)
             .setContentIntent(pendingIntent)
 
-        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-
+        notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        var firstTimeSettings = false
         locationClient
             .getLocationUpdates(1000L)
             .catch { e -> e.printStackTrace() }
@@ -345,61 +334,74 @@ class LocationService: Service() {
                     println(bucket)
                     socket.emit("streamLocation", bucket)
                 }
-
-            }
-            .launchIn(serviceScope)
-
-        gyroscopeClient.getGyroscopeData()
-            .onEach { gyroData ->
-                lastGyroData.add(gyroData)
-                // Do something with gyroData (FloatArray)
-                // gyroData[0] -> x-axis, gyroData[1] -> y-axis, gyroData[2] -> z-axis
-//                println("[RTRD] [gyro] x: " + gyroData[1] + " y: "+  gyroData[2])
-                // Check if any axis exceeds 10
-                if (gyroData[0].toFloat() > 8 || gyroData[1].toFloat()  > 8 || gyroData[2].toFloat()  > 8) {
-                    //TOne generator
-                    val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
-                    toneGenerator.startTone(3)
-                    toneGenerator.startTone(ToneGenerator.TONE_CDMA_ANSWER, 10000)
-                    crashed = true
-                    val lastAccel = lastAccelData[lastAccelData.size-1]
-                    socket.emit("crashDetected", getBucket(
-                        JSONObject()
-                        .put("requestor","device")
-                        .put("requested", getSavedEmail()).toString()
-                        ).put("instance",JSONObject()
-                        .put("gx",gyroData[0].toFloat())
-                        .put("gy",gyroData[1].toFloat())
-                        .put("gz",gyroData[2].toFloat())
-                        .put("ax",lastAccel[0].toFloat())
-                        .put("ay",lastAccel[1].toFloat())
-                        .put("az",lastAccel[2].toFloat()))
-                    )
+                else if(!firstTimeSettings){
+                    println("[RTRD] sending location only one time-> shareAllways:disabled")
+                    var serverMessageMock = JSONObject().put("requestor","device").put("requested",getSavedEmail()).toString()
+                    var bucket = getBucket(serverMessageMock)
+                    println(bucket)
+                    socket.emit("streamLocation", bucket)
+                    firstTimeSettings=true
                 }
 
             }
             .launchIn(serviceScope)
 
-        gyroscopeClient.getAccelerometerData()
-            .onEach { accelData ->
-                lastAccelData.add(accelData)
-                // Do something with accelData (FloatArray)
-                // accelData[0] -> x-axis, accelData[1] -> y-axis, accelData[2] -> z-axis
-//                println("[RTRD] [accel] x: " + accelData[1] + " y: "+  accelData[2])
-            }
-            .launchIn(serviceScope)
-        startForeground(1, notification.build())
-    }
+        if(getCrashDetection()){
+            gyroscopeClient.getGyroscopeData()
+                .onEach { gyroData ->
+                    lastGyroData.add(gyroData)
+                    // Do something with gyroData (FloatArray)
+                    // gyroData[0] -> x-axis, gyroData[1] -> y-axis, gyroData[2] -> z-axis
+//                println("[RTRD] [gyro] x: " + gyroData[1] + " y: "+  gyroData[2])
+                    // Check if any axis exceeds 10
+                    if (gyroData[0].toFloat() > 8 || gyroData[1].toFloat()  > 8 || gyroData[2].toFloat()  > 8) {
+                        //TOne generator
+                        val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+                        toneGenerator.startTone(3)
+                        toneGenerator.startTone(ToneGenerator.TONE_CDMA_ANSWER, 10000)
+                        crashed = true
+                        val lastAccel = lastAccelData[lastAccelData.size-1]
+                        socket.emit("crashDetected", getBucket(
+                            JSONObject()
+                                .put("requestor","device")
+                                .put("requested", getSavedEmail()).toString()
+                        ).put("instance",JSONObject()
+                            .put("gx",gyroData[0].toFloat())
+                            .put("gy",gyroData[1].toFloat())
+                            .put("gz",gyroData[2].toFloat())
+                            .put("ax",lastAccel[0].toFloat())
+                            .put("ay",lastAccel[1].toFloat())
+                            .put("az",lastAccel[2].toFloat()))
+                        )
+                    }
 
-    private fun stop() {
-        socket.disconnect()
-        socket.on(Socket.EVENT_DISCONNECT) {
-            // This code will be executed when the disconnection is successful
-            stopForeground(STOP_FOREGROUND_DETACH)
-            stopSelf()
+                }
+                .launchIn(serviceScope)
+
+            gyroscopeClient.getAccelerometerData()
+                .onEach { accelData ->
+                    lastAccelData.add(accelData)
+                    // Do something with accelData (FloatArray)
+                    // accelData[0] -> x-axis, accelData[1] -> y-axis, accelData[2] -> z-axis
+                    // println("[RTRD] [accel] x: " + accelData[1] + " y: "+  accelData[2])
+                }
+                .launchIn(serviceScope)
         }
 
+        startForeground(NOTIFICATION_ID, notification.build())
     }
+
+        private fun stop() {
+            socket.disconnect()
+            socket.on(Socket.EVENT_DISCONNECT) {
+                // This code will be executed when the disconnection is successful
+//                stopForeground(STOP_FOREGROUND_DETACH)
+                notificationManager.cancel(NOTIFICATION_ID)
+                stopSelf()
+
+            }
+
+        }
 
     override fun onDestroy() {
         super.onDestroy()
@@ -413,23 +415,3 @@ class LocationService: Service() {
         const val EXTRA_ROUTE_NAME = "route_name"
     }
 }
-
-//LOCATION COMPUTE STOP
-
-
-//                val url = "https://locationsocket.jmjdrwrk.repl.co/location"
-//
-//
-//                val requestBody = lastLocationData.toString().toRequestBody("application/json".toMediaTypeOrNull())
-//
-//                val request = Request.Builder()
-//                    .url(url)
-//                    .post(requestBody)
-//                    .build()
-//
-//                val client = OkHttpClient()
-//                client.newCall(request).execute().use { response ->
-//                    if (!response.isSuccessful) {
-//                        // Handle the error if the request was not successful
-//                    }
-//                }

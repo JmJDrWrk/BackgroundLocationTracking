@@ -30,6 +30,7 @@ class DeviceActivity : ComponentActivity() {
     private lateinit var recordRouteCheckbox: CheckBox
     private lateinit var fallDetectionCheckbox: CheckBox
     private lateinit var shareAllwaysCheckbox: CheckBox
+    private lateinit var crashDetectionCheckbox: CheckBox
     private lateinit var locationUpdateIntervalSpinner: Spinner
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,6 +46,7 @@ class DeviceActivity : ComponentActivity() {
         val recordRoute = getRecordRoute()
         val fallDetection = getFallDetection()
         val shareAllways = getShareAllways()
+        val crashDetection = getCrashDetection()
         val selectedInterval = getLocationUpdateInterval()
 
         emailEditText.setText(savedEmail)
@@ -53,12 +55,14 @@ class DeviceActivity : ComponentActivity() {
         recordRouteCheckbox = findViewById(R.id.recordRouteCheckbox)
         fallDetectionCheckbox = findViewById(R.id.fallDetectionCheckbox)
         shareAllwaysCheckbox = findViewById(R.id.shareAllwaysCheckbox)
+        crashDetectionCheckbox = findViewById(R.id.crashDetectionCheckbox)
         locationUpdateIntervalSpinner = findViewById(R.id.locationUpdateIntervalSpinner)
 
         // Set the state of checkboxes and spinner
         recordRouteCheckbox.isChecked = recordRoute
         fallDetectionCheckbox.isChecked = fallDetection
         shareAllwaysCheckbox.isChecked = shareAllways
+        crashDetectionCheckbox.isChecked = crashDetection
         // Set the selected item in the spinner
         val position = resources.getStringArray(R.array.location_update_intervals).indexOf(selectedInterval)
         locationUpdateIntervalSpinner.setSelection(position)
@@ -76,6 +80,7 @@ class DeviceActivity : ComponentActivity() {
         recordRouteCheckbox = findViewById(R.id.recordRouteCheckbox)
         fallDetectionCheckbox = findViewById(R.id.fallDetectionCheckbox)
         shareAllwaysCheckbox = findViewById(R.id.shareAllwaysCheckbox)
+        crashDetectionCheckbox = findViewById(R.id.crashDetectionCheckbox)
         locationUpdateIntervalSpinner = findViewById(R.id.locationUpdateIntervalSpinner)
     }
 
@@ -97,6 +102,9 @@ class DeviceActivity : ComponentActivity() {
     private fun getShareAllways(): Boolean {
         return sharedPreferences.getBoolean("shareAllways", false)
     }
+    private fun getCrashDetection(): Boolean {
+        return sharedPreferences.getBoolean("crashDetection", false)
+    }
 
     private fun getLocationUpdateInterval(): String {
         return sharedPreferences.getString("locationUpdateInterval", "1 minute") ?: "1 minute"
@@ -110,6 +118,7 @@ class DeviceActivity : ComponentActivity() {
             putBoolean("recordRoute", recordRouteCheckbox.isChecked)
             putBoolean("fallDetection", fallDetectionCheckbox.isChecked)
             putBoolean("shareAllways", shareAllwaysCheckbox.isChecked)
+            putBoolean("crashDetection", crashDetectionCheckbox.isChecked)
             putString("locationUpdateInterval", locationUpdateIntervalSpinner.selectedItem.toString())
             apply()
         }
