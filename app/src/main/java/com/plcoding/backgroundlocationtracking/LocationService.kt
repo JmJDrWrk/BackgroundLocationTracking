@@ -222,7 +222,10 @@ class LocationService : Service() {
                 isDebugInspectorInfoEnabled = true
                 auth = mapOf(
                     "email" to getSavedEmail(),
-                    "password" to getSavedPassword()
+                    "password" to getSavedPassword(),
+                    "shareAllways" to getShareAllways().toString(),
+                    "recordRoute" to getRecordRoute().toString(),
+                    "version" to "0"
                 )
             })
 
@@ -238,6 +241,7 @@ class LocationService : Service() {
         socket.on("emitMyLocation", onLocationRequested)
         socket.on("serverHandshake", onServerHandshake)
         socket.on("authError", onAuthError)
+
         locationClient = DefaultLocationClient(
             applicationContext,
             LocationServices.getFusedLocationProviderClient(applicationContext)
@@ -375,24 +379,20 @@ class LocationService : Service() {
 
                     if (getShareAllways()) {
                         println("[RTRD] streaming location -> shareAllways:enabled")
-                        var serverMessageMock =
-                            JSONObject().put("requestor", "device").put("requested", getSavedEmail())
-                                .toString()
-                        var bucket = getBucket(serverMessageMock)
-                        println(bucket)
-                        if (getRecordRoute()) {
-                            socket.emit("streamLocation", bucket)
-                        }
-
-                    } else if (!firstTimeSettings) {
-                        println("[RTRD] sending location only one time-> shareAllways:disabled")
-                        var serverMessageMock = JSONObject().put("requestor", "device")
-                            .put("requested", getSavedEmail()).toString()
-                        var bucket = getBucket(serverMessageMock)
-                        println(bucket)
-                        socket.emit("streamLocation", bucket)
-                        firstTimeSettings = true
+//                        var serverMessageMock =
+//                            JSONObject().put("requestor", "device")
+//                                .put("requested", getSavedEmail())
+//                                .toString()
+//                        var bucket = getBucket(serverMessageMock)
+//                        println(bucket)
+                        //This means if managed by server in device settings
+                        /*if (getRecordRoute() && !firstTimeSettings) {
+                            firstTimeSettings=true
+                            socket.emit("readyToStream", JSONObject().put("requested",getSavedEmail()))
+                            println("HELLOTHERE")
+                        }*/
                     }
+
 
                 }
                     .launchIn(serviceScope)
