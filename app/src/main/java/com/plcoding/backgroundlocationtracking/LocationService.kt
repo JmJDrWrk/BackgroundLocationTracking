@@ -359,12 +359,12 @@ class LocationService : Service() {
 
                     if (getShareAllways()) {
                         println("[RTRD] streaming location -> shareAllways:enabled")
-//                        var serverMessageMock =
-//                            JSONObject().put("requestor", "device")
-//                                .put("requested", getSavedEmail())
-//                                .toString()
-//                        var bucket = getBucket(serverMessageMock)
-//                        println(bucket)
+                        var serverMessageMock =
+                            JSONObject().put("requestor", "device")
+                                .put("requested", getSavedEmail())
+                                .toString()
+                        var bucket = getBucket(serverMessageMock)
+                        println(bucket)
                         //This means if managed by server in device settings
                         /*if (getRecordRoute() && !firstTimeSettings) {
                             firstTimeSettings=true
