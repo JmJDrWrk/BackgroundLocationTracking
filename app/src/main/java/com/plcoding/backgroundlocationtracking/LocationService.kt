@@ -266,7 +266,7 @@ class LocationService : Service() {
             println("[RTRD] from/requestor " + JSONObject(serverMessage).getString(("requested")))
             println("[RTRD] Someone requested my location")
             val lastLocalLocationData = lastLocationData
-//            val settings = JSONObject()
+            val settings = JSONObject()
             println(
                 "[RTRD] This is the latitude " + lastLocalLocationData.getString("latitude")
                     .isEmpty()
@@ -280,12 +280,22 @@ class LocationService : Service() {
                 lastLocalLocationData.getString("vacc").isEmpty()
             ) {
                 println("[RTRD] RISK UNDEFINED!")
-                socket.emit("requestLocationFailed",JSONObject().put("error","NULL BUCKET"))
+                try {
+                    socket.emit(
+                        "requestedLocationFailed",
+                        JSONObject().put("error", lastLocalLocationData.getString("error"))
+                    )
+                } catch (e2: Error) {
+                    socket.emit(
+                        "requestedLocationFailed",
+                        JSONObject().put("error", "[RTRD] [GETSTRING ERROR]")
+                    )
+                }
             } else {
 
                 //Get the bucket
                 var bucket = getBucket(serverMessage)
-                socket.emit("requestLocationFailed", bucket)
+                socket.emit("requestedLocation", bucket)
 
                 //TOne generator
                 val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
@@ -294,7 +304,17 @@ class LocationService : Service() {
             }
 
         } catch (e: Error) {
-            socket.emit("requestLocationFailed",JSONObject().put("error","UNEXPECTED ERROR HAPPENED WHEN TRIED TO RETRIEVE LOCATION AND BUCKET"))
+            try {
+                socket.emit(
+                    "requestedLocationFailed",
+                    JSONObject().put("error onLocationRequested", e.toString())
+                )
+            } catch (e2: Error) {
+                socket.emit(
+                    "requestedLocationFailed",
+                    JSONObject().put("error", "[RTRD] [GETBUCKET ERROR]")
+                )
+            }
 
         }
     }
