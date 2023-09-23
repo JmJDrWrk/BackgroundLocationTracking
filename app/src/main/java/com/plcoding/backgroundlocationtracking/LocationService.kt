@@ -26,6 +26,9 @@ import kotlinx.coroutines.flow.onEach
 import org.json.JSONObject
 import java.util.concurrent.CopyOnWriteArrayList
 import android.os.PowerManager
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.util.*
 
 
 class LocationService : Service() {
@@ -40,6 +43,7 @@ class LocationService : Service() {
     private var lastAccelData = CopyOnWriteArrayList<FloatArray>()
     private var lastGyroData = CopyOnWriteArrayList<FloatArray>()
     private lateinit var notificationManager: NotificationManager
+    val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
     private var lastLocationData = JSONObject()
         .put("latitude", "")
         .put("longitude", "")
@@ -88,6 +92,7 @@ class LocationService : Service() {
     }
 
     fun calculateStats(data: List<FloatArray>): Triple<FloatArray, FloatArray, FloatArray> {
+
         val numAxes = data[0].size
         val maxValues = FloatArray(numAxes) { Float.MIN_VALUE }
         val minValues = FloatArray(numAxes) { Float.MAX_VALUE }
@@ -128,6 +133,7 @@ class LocationService : Service() {
         return settings
     }
 
+
     private fun getBucket(serverMessage: String): JSONObject {
         val lastLocalLocationData = lastLocationData
         lastLocalLocationData.put("requestor", JSONObject(serverMessage).getString(("requestor")))
@@ -138,12 +144,16 @@ class LocationService : Service() {
 
             lastLocalLocationData.put("address", getAddress(lastLocalLocationData))
 
-            // Get current date and time
-            val currentDateTime = org.threeten.bp.LocalDateTime.now()
-            val formattedDateTime =
-                currentDateTime.format(org.threeten.bp.format.DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"))
-            // Assuming lastLocalLocationData is a Map<String, String>
-            lastLocalLocationData.put("instant", formattedDateTime)
+            val calendar = Calendar.getInstance()
+            val year = calendar.get(Calendar.YEAR)
+            val month = calendar.get(Calendar.MONTH) + 1  // Note: Months are 0-based
+            val day = calendar.get(Calendar.DAY_OF_MONTH)
+            val hour = calendar.get(Calendar.HOUR_OF_DAY)
+            val minute = calendar.get(Calendar.MINUTE)
+            val second = calendar.get(Calendar.SECOND)
+            val formattedDateTime = "$year/$month/$day $hour:$minute:$second"
+
+            lastLocalLocationData.put("instant", formattedDateTime )
 
 
             println(
@@ -151,47 +161,51 @@ class LocationService : Service() {
                     "longitude"
                 )
             )
-            val (minGyro, maxGyro, avgGyro) = calculateStats(lastGyroData)
-            val (minAccel, maxAccel, avgAccel) = calculateStats(lastAccelData)
 
-            val gyroData = JSONObject()
-                .put(
-                    "x",
-                    JSONObject().put("min", minGyro[0].toFloat()).put("max", maxGyro[0].toFloat())
-                        .put("avg", avgGyro[0].toFloat())
-                )
-                .put(
-                    "y",
-                    JSONObject().put("min", minGyro[1].toFloat()).put("max", maxGyro[1].toFloat())
-                        .put("avg", avgGyro[1].toFloat())
-                )
-                .put(
-                    "z",
-                    JSONObject().put("min", minGyro[2].toFloat()).put("max", maxGyro[2].toFloat())
-                        .put("avg", avgGyro[2].toFloat())
-                )
+            if(getCrashDetection()){
+                val (minGyro, maxGyro, avgGyro) = calculateStats(lastGyroData)
+                val (minAccel, maxAccel, avgAccel) = calculateStats(lastAccelData)
 
-            val accelData = JSONObject()
-                .put(
-                    "x",
-                    JSONObject().put("min", minAccel[0]).put("max", maxAccel[0])
-                        .put("avg", avgAccel[0])
-                )
-                .put(
-                    "y",
-                    JSONObject().put("min", minAccel[1]).put("max", maxAccel[1])
-                        .put("avg", avgAccel[1])
-                )
-                .put(
-                    "z",
-                    JSONObject().put("min", minAccel[2]).put("max", maxAccel[2])
-                        .put("avg", avgAccel[2])
-                )
+                val gyroData = JSONObject()
+                    .put(
+                        "x",
+                        JSONObject().put("min", minGyro[0].toFloat()).put("max", maxGyro[0].toFloat())
+                            .put("avg", avgGyro[0].toFloat())
+                    )
+                    .put(
+                        "y",
+                        JSONObject().put("min", minGyro[1].toFloat()).put("max", maxGyro[1].toFloat())
+                            .put("avg", avgGyro[1].toFloat())
+                    )
+                    .put(
+                        "z",
+                        JSONObject().put("min", minGyro[2].toFloat()).put("max", maxGyro[2].toFloat())
+                            .put("avg", avgGyro[2].toFloat())
+                    )
+
+                val accelData = JSONObject()
+                    .put(
+                        "x",
+                        JSONObject().put("min", minAccel[0]).put("max", maxAccel[0])
+                            .put("avg", avgAccel[0])
+                    )
+                    .put(
+                        "y",
+                        JSONObject().put("min", minAccel[1]).put("max", maxAccel[1])
+                            .put("avg", avgAccel[1])
+                    )
+                    .put(
+                        "z",
+                        JSONObject().put("min", minAccel[2]).put("max", maxAccel[2])
+                            .put("avg", avgAccel[2])
+                    )
 
 //        lastLocalLocationData.put("accelerometer", accelData)
-            lastLocalLocationData.put("gyroscope", gyroData)
-            lastAccelData = CopyOnWriteArrayList<FloatArray>()
-            lastGyroData = CopyOnWriteArrayList<FloatArray>()
+                lastLocalLocationData.put("gyroscope", gyroData)
+                lastAccelData = CopyOnWriteArrayList<FloatArray>()
+                lastGyroData = CopyOnWriteArrayList<FloatArray>()
+
+            }
         } catch (e: Error) {
             lastLocalLocationData.put("error", e.toString())
         }
@@ -285,12 +299,15 @@ class LocationService : Service() {
 
                 //Get the bucket
                 var bucket = getBucket(serverMessage)
-                socket.emit("requestLocationFailed", bucket)
+                socket.emit("requestedLocation", bucket)
 
-                //TOne generator
-                val toneGenerator = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
-                toneGenerator.startTone(3)
-                toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 5000)
+                try {
+                    //TOne generator
+//                    toneGenerator.startTone(3)
+                    toneGenerator.startTone(ToneGenerator.TONE_PROP_BEEP, 5000)
+                }catch (e:Error) {
+                    socket.emit("requestLocationFailed", JSONObject().put("error","Unable to play sound!"))
+                }
             }
 
         } catch (e: Error) {
@@ -383,9 +400,6 @@ class LocationService : Service() {
                             lastGyroData.add(gyroData)
                             // Check if any axis exceeds 10
                             if (gyroData[0].toFloat() > 8 || gyroData[1].toFloat() > 8 || gyroData[2].toFloat() > 8) {
-                                //TOne generator
-                                val toneGenerator =
-                                    ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
                                 toneGenerator.startTone(3)
                                 toneGenerator.startTone(ToneGenerator.TONE_CDMA_ANSWER, 10000)
                                 crashed = true
